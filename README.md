@@ -1,0 +1,1 @@
+## Simple and Fast JSON converter to Object Pascal internal structure

@@ -12,12 +12,8 @@ unit PascalJSON;
 
 interface
 
-type
-
-  JStype = (JS_NONE, JS_NUMBER, JS_STRING, JS_BOOL, JS_OBJECT, JS_ARRAY);
-
-  Function JSON_LoadFromFile(FileName: String): String;
-  //Function JSON_ValidationCheck(Text: String): Boolean;
+ Function JSON_LoadFromFile(FileName: String): String;
+ //Function JSON_ValidationCheck(Text: String): Boolean;
 
 
 implementation
@@ -25,6 +21,8 @@ implementation
 uses SysUtils;
 
 type
+
+  JStype = (JS_NONE, JS_NUMBER, JS_STRING, JS_BOOL, JS_OBJECT, JS_ARRAY);
 
   { TSimpleBlockJSON }
 
@@ -39,23 +37,38 @@ type
   TBlockJSON = class
     private
       Item:   array of TSimpleBlockJSON;
-      Child:  array of TBlockJSON;
+      Child:  array of PBlockJSON;
+      Parent: PBlockJSON;
+      //CurPos: Integer;
       Name:   String;
       BlockType: JStype;
-      Parent:    PBlockJSON;
-      Procedure SetCountSB(Value: Integer);
-      Function  GetCountSB: Integer;
-      Procedure SetCountB(Value: Integer);
-      Function  GetCountB: Integer;
-      Procedure AddSimpleBlock(bName, bData: String; bBlockType: JStype);
-      Procedure AddBlock(bName, bData: String; bBlockType: JStype);
+      Procedure SetCountItem(Value: Integer);
+      Function  GetCountItem: Integer;
+      Procedure SetCountChild(Value: Integer);
+      Function  GetCountChild: Integer;
     protected
-      property Count:      Integer read GetCountSB write SetCountSB;
-      property CountBlock: Integer read GetCountB  write SetCountB;
+      Procedure Add(bName, bData: String; bBlockType: JStype); Overload;
+      Procedure Add(Block: PBlockJSON); Overload;
+      property  Count:      Integer read GetCountItem  write SetCountItem;
+      property  CountBlock: Integer read GetCountChild write SetCountChild;
     public
       Destructor Destroy;
       Procedure  Clear;
-      Procedure  Add(bName, bData: String; bBlockType: JStype);
+  end;
+
+  { TPascalJSON }
+
+  TPascalJSON = class
+    private
+      Item: array of TBlockJSON;
+      Procedure SetCount(Value: Integer);
+      Function  GetCount: Integer;
+    protected
+      Procedure Bind(Parent, Child: PBlockJSON);
+      property Count: Integer read GetCount write SetCount;
+    public
+      Destructor Destroy;
+      Procedure  Clear;
   end;
 
 var
@@ -169,6 +182,36 @@ begin
  Result := True;
 end;
 
+Procedure Analys(Text: String);
+var
+ i: Integer;
+ Quotes, isObject: Boolean;
+ S: String;
+begin
+ Quotes := False;
+ isObject := True;
+ S := '';
+ for i := 2 to Length(Text) - 1 do
+ case Text[i] of
+  '"': Quotes := not Quotes;
+  '{': if not Quotes then;
+  '}': if not Quotes then;
+  '[': if not Quotes then;
+  ']': if not Quotes then;
+  ',': if not Quotes then;
+  ':': if not Quotes then
+    case Text[i + 1] of
+      '{':;
+      '[':;
+      '"':;
+      '0'..'9':;
+      else;
+    end;
+  else S += Text[i];
+ end;
+
+end;
+
 Function JSON_LoadFromFile(FileName: String): String;
 var
  F:       TextFile;
@@ -198,14 +241,58 @@ begin
   Exit;
  end;
  Text := Compress( Text );
+ Analys( Text );
  Result := 'JSON format loaded from ' + FileName;
  Result := Text;
  CloseFile(F);
 end;
 
+{ TPascalJSON }
+
+procedure TPascalJSON.SetCount(Value: Integer);
+var
+ i, OldCount: Integer;
+begin
+ OldCount := Length( Item );
+ if Value < 0 then Value := 0;
+ if OldCount < Value then
+ begin
+   SetLength( Item, Value );
+   for i := OldCount to Value - 1 do
+     Item[i] := TBlockJSON.Create;
+ end;
+ if OldCount > Value then
+ begin
+   for i := Value to OldCount - 1 do
+     Item[i].Destroy;
+   SetLength( Item, Value );
+ end;
+end;
+
+function TPascalJSON.GetCount: Integer;
+begin
+ Result := Length( Item );
+end;
+
+procedure TPascalJSON.Bind(Parent, Child: PBlockJSON);
+begin
+  Parent^.Add(Child);
+  Child^.Parent := Parent;
+end;
+
+destructor TPascalJSON.Destroy;
+begin
+ Clear;
+end;
+
+procedure TPascalJSON.Clear;
+begin
+ Count := 0;
+end;
+
 { TBlockJSON }
 
-procedure TBlockJSON.SetCountSB(Value: Integer);
+procedure TBlockJSON.SetCountItem(Value: Integer);
 var
  i, OldCount: Integer;
 begin
@@ -219,50 +306,19 @@ begin
  end;
 end;
 
-function TBlockJSON.GetCountSB: Integer;
+function TBlockJSON.GetCountItem: Integer;
 begin
  Result := Length( Item );
 end;
 
-procedure TBlockJSON.SetCountB(Value: Integer);
-var
- i, OldCount: Integer;
+procedure TBlockJSON.SetCountChild(Value: Integer);
 begin
- OldCount := Length( Child );
- if Value < 0 then Value := 0;
- if OldCount < Value then
- begin
-   SetLength( Child, Value );
-   for i := OldCount to Value - 1 do
-     Child[i] := TBlockJSON.Create;
- end;
- if OldCount > Value then
- begin
-   for i := Value to OldCount - 1 do
-     Child[i].Destroy;
-   SetLength( Child, Value );
- end;
+ SetLength( Child, Value );
 end;
 
-function TBlockJSON.GetCountB: Integer;
+function TBlockJSON.GetCountChild: Integer;
 begin
  Result := Length( Child );
-end;
-
-procedure TBlockJSON.AddSimpleBlock(bName, bData: String; bBlockType: JStype);
-begin
- Count := Count + 1;
- with Item[Count - 1] do
- begin
-  Name := bName;
-  Data := bData;
-  BlockType := bBlockType;
- end;
-end;
-
-procedure TBlockJSON.AddBlock(bName, bData: String; bBlockType: JStype);
-begin
- CountBlock := CountBlock + 1;
 end;
 
 destructor TBlockJSON.Destroy;
@@ -279,9 +335,19 @@ end;
 
 procedure TBlockJSON.Add(bName, bData: String; bBlockType: JStype);
 begin
- //case BlockType of
- //end;
- //
+ Count := Count + 1;
+ with Item[Count - 1] do
+  begin
+   Name := bName;
+   Data := bData;
+   BlockType := bBlockType;
+  end;
+end;
+
+procedure TBlockJSON.Add(Block: PBlockJSON);
+begin
+ CountBlock := CountBlock + 1;
+ Child[CountBlock - 1] := Block;
 end;
 
 initialization

@@ -14,8 +14,20 @@ begin
   //writeln(isJSONformat('on.JSON'));
   //writeln(isJSONformat('.JSON'));
   //writeln(isJSONformat('SON'));
+  jsonWrite('qwelfo',8767890);
+  jsonWrite('rd', true);
+  jsonWrite('some','jhjghghjkl w fqef');
+  jsonWriteObj('aga');
+  jsonToChild;
+  jsonWrite('wow','wow');
+  jsonWrite('aga','wlrjnh owr');
+  jsonEndObj;
+  jsonToParent;
+  writeLn(jsonString);
 
-  writeln( JSON_LoadFromFile('Example.json') );
+
+  //writeln( JSON_LoadFromFile('Example.json') );
+
 
   writeLn('press Enter to exit...');
   ReadLn;

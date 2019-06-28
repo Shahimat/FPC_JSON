@@ -1,5 +1,6 @@
 *.exe
 *.lpi
 *.lps
+*.idea
 /lib
 /backup

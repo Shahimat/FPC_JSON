@@ -2,5 +2,6 @@
 *.lpi
 *.lps
 *.idea
+*.log
 /lib
 /backup

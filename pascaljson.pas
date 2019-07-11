@@ -43,7 +43,7 @@ interface
 
 implementation
 
-uses SysUtils;
+uses SysUtils, debugger;
 
 type
 
@@ -96,6 +96,21 @@ type
       Function  toString(i: Integer): String; Overload;
       Procedure Bind(Parent, Child: PBlockJSON);
       property  Count: Integer read GetCount write SetCount;
+
+      Procedure writeJSsimpleType(Value: JSsimpleType);
+      Procedure writeJStype(Value: JStype);
+      Procedure writeSimpleBlockJSON(Value: TSimpleBlockJSON);
+      Procedure writeRecordBlockJSON(Value: TRecordBlockJSON);
+      Procedure writeMainBlockJSON(Value: TBlockJSON);
+      Procedure writeBlockJSON(Value: TBlockJSON);
+
+      Procedure logJSsimpleType(Value: JSsimpleType);
+      Procedure logJStype(Value: JStype);
+      Procedure logSimpleBlockJSON(Value: TSimpleBlockJSON);
+      Procedure logRecordBlockJSON(Value: TRecordBlockJSON);
+      Procedure logMainBlockJSON(Value: TBlockJSON);
+      Procedure logBlockJSON(Value: TBlockJSON);
+      Procedure logAll;
     public
       Constructor Create;
       Destructor  Destroy;
@@ -116,6 +131,18 @@ type
 
 var
  jsonMain: TPascalJSON;
+
+{$MACRO ON}
+
+{$DEFINE WRITE_NAME_VALUE :=
+begin
+ Write(Name);
+ WriteDef;
+ Write;
+ Write(Value);
+ WriteEnd;
+ Write;
+end;}
 
 Function isJSONexpansion( FileName: String ): Boolean;
 var
@@ -511,7 +538,11 @@ begin
  Clear(i);
  case SomeType of
   JS_SIMPLE:           New( Item[i].BlockSimple );
-  JS_OBJECT, JS_ARRAY: New( Item[i].BlockRecord );
+  JS_OBJECT, JS_ARRAY:
+    begin
+      New( Item[i].BlockRecord );
+      Item[i].BlockRecord^.CurrentPos := 0;
+    end;
  end;
  Item[i].BlockType := SomeType;
 end;
@@ -534,16 +565,124 @@ end;
 
 procedure TPascalJSON.Bind(Parent, Child: PBlockJSON);
 begin
+  Console.Write('Bind');
+  Console.Write;
+  logBlockJSON(Parent^);
   AddChild(Parent, Child);
   Child^.Parent := Parent;
 end;
 
+procedure TPascalJSON.writeJSsimpleType(Value: JSsimpleType);
+begin
+ Case Value of
+  JSS_NONE:   Console.Write('JSsimpleType', 'JSS_NONE');
+  JSS_NUMBER: Console.Write('JSsimpleType', 'JSS_NUMBER');
+  JSS_STRING: Console.Write('JSsimpleType', 'JSS_STRING');
+  JSS_BOOL:   Console.Write('JSsimpleType', 'JSS_BOOL');
+ end;
+end;
+
+procedure TPascalJSON.writeJStype(Value: JStype);
+begin
+ Case Value of
+  JS_NONE:   Console.Write('JStype', 'JS_NONE');
+  JS_SIMPLE: Console.Write('JStype', 'JS_SIMPLE');
+  JS_OBJECT: Console.Write('JStype', 'JS_OBJECT');
+  JS_ARRAY:  Console.Write('JStype', 'JS_ARRAY');
+ end;
+end;
+
+procedure TPascalJSON.writeSimpleBlockJSON(Value: TSimpleBlockJSON);
+begin
+ writeJSsimpleType(Value.BlockType);
+ Case Value.BlockType of
+  JSS_NUMBER: Console.Write('Value', Value.numData^);
+  JSS_STRING: Console.Write('Value', Value.strData^);
+  JSS_BOOL:   Console.Write('Value', Value.boolData^);
+ end;
+end;
+
+procedure TPascalJSON.writeRecordBlockJSON(Value: TRecordBlockJSON);
+var
+ i: Integer;
+begin
+  Console.Log('CurrentPos', Value.CurrentPos);
+  for i := Low(Value.Data) to High(Value.Data) do
+  begin
+    Console.Write;
+    logMainBlockJSON(Value.Data[i]^);
+  end;
+end;
+
+procedure TPascalJSON.writeMainBlockJSON(Value: TBlockJSON);
+begin
+ Console.Write('Name', Value.Name);
+ writeJStype(Value.BlockType);
+ if Value.Parent <> nil then
+ Console.Write('Parent', Value.Parent^.Name);
+end;
+
+procedure TPascalJSON.writeBlockJSON(Value: TBlockJSON);
+begin
+ writeMainBlockJSON(Value);
+ Case Value.BlockType of
+  JS_SIMPLE:           writeSimpleBlockJSON(Value.BlockSimple^);
+  JS_OBJECT, JS_ARRAY: writeRecordBlockJSON(Value.BlockRecord^);
+ end;
+end;
+
+procedure TPascalJSON.logJSsimpleType(Value: JSsimpleType);
+begin
+ writeJSsimpleType(Value);
+ Console.Log;
+end;
+
+procedure TPascalJSON.logJStype(Value: JStype);
+begin
+ writeJStype(Value);
+ Console.Log;
+end;
+
+procedure TPascalJSON.logSimpleBlockJSON(Value: TSimpleBlockJSON);
+begin
+ writeSimpleBlockJSON(Value);
+ Console.Log;
+end;
+
+procedure TPascalJSON.logRecordBlockJSON(Value: TRecordBlockJSON);
+begin
+ writeRecordBlockJSON(Value);
+ Console.Log;
+end;
+
+procedure TPascalJSON.logMainBlockJSON(Value: TBlockJSON);
+begin
+ writeMainBlockJSON(Value);
+ Console.Log;
+end;
+
+procedure TPascalJSON.logBlockJSON(Value: TBlockJSON);
+begin
+ writeBlockJSON(Value);
+ Console.Log;
+end;
+
+procedure TPascalJSON.logAll;
+var
+ i: Integer;
+begin
+ for i := 0 to Length(Item) - 1 do
+ begin
+   Console.Write(i);
+   Console.Write;
+   logBlockJSON(Item[i]);
+ end;
+ Console.FinishWork;
+end;
+
 constructor TPascalJSON.Create;
 begin
- Count := 1;
- Change(0, JS_OBJECT);
- Item[0].Name := 'root';
- toRoot;
+ Clear;
 end;
 
 destructor TPascalJSON.Destroy;
@@ -554,10 +693,10 @@ end;
 
 procedure TPascalJSON.Clear;
 begin
- toRoot;
  Count := 1;
- Clear(0);
+ Change(0, JS_OBJECT);
  Item[0].Name := 'root';
+ toRoot;
 end;
 
 procedure TPascalJSON.Reset;
@@ -578,6 +717,7 @@ end;
 
 procedure TPascalJSON.toChild;
 begin
+ logAll;
  with Current^.BlockRecord^ do
  if CurrentPos <= Length(Data) then
  begin
@@ -597,13 +737,15 @@ begin
 end;
 
 procedure TPascalJSON.Write(Name, Value: String);
+const
+ BlockType = JSS_STRING;
 var
  Position: Integer;
 begin
  Position := Count;
  Count := Position + 1;
  Change(Position, JS_SIMPLE);
- Change(Item[Position].BlockSimple, JSS_STRING);
+ Change(Item[Position].BlockSimple, BlockType);
  Item[Position].BlockSimple^.strData^ := Value;
  case Current^.BlockType of
   JS_OBJECT: Item[Position].Name := Name;
@@ -706,6 +848,8 @@ initialization
 
 finalization
  jsonMain.Destroy;
+
+{$MACRO OFF}
 
 end.
 

@@ -2,7 +2,7 @@ program ExamplePROJ;
 
 {$APPTYPE CONSOLE}
 
-uses PascalJSON;
+uses PascalJSON, debugger;
 
 begin
 
@@ -14,20 +14,26 @@ begin
   //writeln(isJSONformat('on.JSON'));
   //writeln(isJSONformat('.JSON'));
   //writeln(isJSONformat('SON'));
-  jsonWrite('qwelfo',8767890);
-  jsonWrite('rd', true);
-  jsonWrite('some','jhjghghjkl w fqef');
-  jsonWriteObj('aga');
+
+
+  //Console.Log(N, S);
+
+
+
+  jsonWrite('valroot1',8767890);
+  jsonWrite('valroot2', true);
+  jsonWrite('valroot3','sometext');
+  jsonWriteObj('obj1');
   jsonToChild;
-  jsonWrite('wow','wow');
-  jsonWrite('aga','wlrjnh owr');
+  jsonWrite('valobj1','sometext1');
+  jsonWrite('valobj2','sometext2');
   jsonEndObj;
   jsonToParent;
+  jsonWrite('valroot4',87.6);
   writeLn(jsonString);
 
 
   //writeln( JSON_LoadFromFile('Example.json') );
-
 
   writeLn('press Enter to exit...');
   ReadLn;

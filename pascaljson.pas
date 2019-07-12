@@ -65,6 +65,8 @@ type
    boolData:  PBoolean;
  end;
 
+ //Допустим я это тут добавил
+
  TRecordBlockJSON = record
    CurrentPos: Integer;
    Level:      Integer;

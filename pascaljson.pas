@@ -45,10 +45,14 @@ implementation
 
 uses SysUtils, debugger;
 
+const
+ //max number of JSON elements, include strings, numbers, booleans, objects and arrays
+ MAX_LENGTH = 10000;
+
 type
 
- JSsimpleType = (JSS_NONE, JSS_NUMBER, JSS_STRING, JSS_BOOL);
- JStype = (JS_NONE, JS_SIMPLE, JS_OBJECT, JS_ARRAY);
+ JSsimpleType = ( JSS_NONE, JSS_NUMBER, JSS_STRING, JSS_BOOL );
+ JStype       = (  JS_NONE,  JS_SIMPLE,  JS_OBJECT, JS_ARRAY );
 
  PSimpleBlockJSON = ^TSimpleBlockJSON;
  PRecordBlockJSON = ^TRecordBlockJSON;
@@ -63,10 +67,11 @@ type
 
  TRecordBlockJSON = record
    CurrentPos: Integer;
+   Level:      Integer;
    Data:       Array of PBlockJSON;
  end;
 
- TBlockJSON = record
+ TBlockJSON = packed record
    BlockType:   JStype;
    Name:        String;
    BlockSimple: PSimpleBlockJSON;
@@ -79,23 +84,24 @@ type
 
   TPascalJSON = class
     private
-      Item: array of TBlockJSON;
-      Level: Integer;
+      Item: array [0..MAX_LENGTH - 1] of TBlockJSON;
+      //Level: Integer;
       Current: PBlockJSON;
+      fCount: Integer;
       Procedure SetCount(Value: Integer);
-      Function  GetCount: Integer;
       Procedure Change(Value: PSimpleBlockJSON; SomeType: JSsimpleType); Overload;
       Procedure Clear(Value: PRecordBlockJSON); Overload;
       Procedure Clear(Value: PSimpleBlockJSON); Overload;
       Procedure AddChild(Parent, Child: PBlockJSON);
-      Function  TabLevel: String;
+      Function  TabLevel(Level: Integer): String;
       Function  toString(Value: PSimpleBlockJSON): String; Overload;
     protected
       Procedure Clear(i: Integer); Overload;
       Procedure Change(i: Integer; SomeType: JStype); Overload;
       Function  toString(i: Integer): String; Overload;
       Procedure Bind(Parent, Child: PBlockJSON);
-      property  Count: Integer read GetCount write SetCount;
+      Procedure SimpleBind(var Parent, Child: PBlockJSON);
+      property  Count: Integer read fCount write SetCount;
 
       Procedure writeJSsimpleType(Value: JSsimpleType);
       Procedure writeJStype(Value: JStype);
@@ -433,11 +439,11 @@ procedure TPascalJSON.SetCount(Value: Integer);
 var
  i, OldCount: Integer;
 begin
- OldCount := Length( Item );
+ OldCount := fCount;
  if Value < 0 then Value := 0;
  if OldCount < Value then
  begin
-   SetLength( Item, Value );
+   fCount := Value;
    for i := OldCount to Value - 1 do
    begin
      Item[i].BlockType := JS_NONE;
@@ -448,13 +454,8 @@ begin
  begin
    for i := Value to OldCount - 1 do
      Clear(i);
-   SetLength( Item, Value );
+   fCount := Value;
  end;
-end;
-
-function TPascalJSON.GetCount: Integer;
-begin
- Result := Length( Item );
 end;
 
 procedure TPascalJSON.Change(Value: PSimpleBlockJSON; SomeType: JSsimpleType
@@ -476,6 +477,7 @@ end;
 procedure TPascalJSON.Clear(Value: PRecordBlockJSON);
 begin
  SetLength(Value^.Data, 0);
+ Value^.Level := 0;
 end;
 
 procedure TPascalJSON.Clear(Value: PSimpleBlockJSON);
@@ -492,7 +494,7 @@ begin
  end;
 end;
 
-function TPascalJSON.TabLevel: String;
+function TPascalJSON.TabLevel(Level: Integer): String;
 var
  i: Integer;
 begin
@@ -548,27 +550,35 @@ begin
 end;
 
 function TPascalJSON.toString(i: Integer): String;
+var
+ TabLev: String;
 begin
+ //Console.Write('Name', Item[i].Parent^.Name);
+ //Console.ToFile;
+ TabLev := TabLevel(Item[i].Parent^.BlockRecord^.Level);
  with Item[i] do
  if Name <> '' then
  case BlockType of
-  JS_SIMPLE: Result := '"' + Name + '":' + toString( Item[i].BlockSimple );
-  JS_OBJECT: Result := '"' + Name + '": {';
-  JS_ARRAY:  Result := '"' + Name + '": [';
+  JS_SIMPLE: Result := TabLev + '"' + Name + '":' + toString( Item[i].BlockSimple ) + #13#10;
+  JS_OBJECT: Result := TabLev + '"' + Name + '": {' + #13#10;
+  JS_ARRAY:  Result := TabLev + '"' + Name + '": [' + #13#10;
  end else
  case BlockType of
-  JS_SIMPLE: Result := toString( Item[i].BlockSimple );
-  JS_OBJECT: Result := '{';
-  JS_ARRAY:  Result := '[';
+  JS_SIMPLE: Result := toString( Item[i].BlockSimple ) + #13#10;
+  JS_OBJECT: Result := TabLev + '{' + #13#10;
+  JS_ARRAY:  Result := TabLev + '[' + #13#10;
  end
 end;
 
 procedure TPascalJSON.Bind(Parent, Child: PBlockJSON);
 begin
-  Console.Write('Bind');
-  Console.Write;
-  logBlockJSON(Parent^);
   AddChild(Parent, Child);
+  Child^.BlockRecord^.Level := Parent^.BlockRecord^.Level + 1;
+  SimpleBind(Parent, Child);
+end;
+
+procedure TPascalJSON.SimpleBind(var Parent, Child: PBlockJSON);
+begin
   Child^.Parent := Parent;
 end;
 
@@ -606,20 +616,26 @@ procedure TPascalJSON.writeRecordBlockJSON(Value: TRecordBlockJSON);
 var
  i: Integer;
 begin
-  Console.Log('CurrentPos', Value.CurrentPos);
-  for i := Low(Value.Data) to High(Value.Data) do
-  begin
-    Console.Write;
-    logMainBlockJSON(Value.Data[i]^);
-  end;
+  Console.Write('Level', Value.Level);
+  //Console.Log('CurrentPos', Value.CurrentPos);
+  //for i := Low(Value.Data) to High(Value.Data) do
+  //begin
+  //  Console.Write;
+  //  logMainBlockJSON(Value.Data[i]^);
+  //end;
 end;
 
 procedure TPascalJSON.writeMainBlockJSON(Value: TBlockJSON);
 begin
  Console.Write('Name', Value.Name);
  writeJStype(Value.BlockType);
- if Value.Parent <> nil then
- Console.Write('Parent', Value.Parent^.Name);
+ if (Value.Parent <> nil) and (Value.BlockType <> JS_NONE) then
+ begin
+  Console.Write('Parent', Value.Parent^.Name);
+  Console.ToFile;
+  //Console.Write('Parent', Value.Parent^.Name);
+
+ end;
 end;
 
 procedure TPascalJSON.writeBlockJSON(Value: TBlockJSON);
@@ -671,7 +687,7 @@ procedure TPascalJSON.logAll;
 var
  i: Integer;
 begin
- for i := 0 to Length(Item) - 1 do
+ for i := 0 to Count - 1 do
  begin
    Console.Write(i);
    Console.Write;
@@ -696,6 +712,7 @@ begin
  Count := 1;
  Change(0, JS_OBJECT);
  Item[0].Name := 'root';
+ Item[0].BlockRecord^.Level := 0;
  toRoot;
 end;
 
@@ -712,7 +729,7 @@ end;
 procedure TPascalJSON.toRoot;
 begin
  Current := @Item[0];
- Level   := 0;
+ //Level   := 0;
 end;
 
 procedure TPascalJSON.toChild;
@@ -722,7 +739,7 @@ begin
  if CurrentPos <= Length(Data) then
  begin
   inc(CurrentPos);
-  inc(Level);
+  //inc(Level);
   Current := Data[CurrentPos - 1];
  end;
 end;
@@ -732,7 +749,7 @@ begin
  if Current^.Name <> 'root' then
  begin
   Current := Current^.Parent;
-  dec(Level);
+  //dec(Level);
  end;
 end;
 
@@ -751,7 +768,8 @@ begin
   JS_OBJECT: Item[Position].Name := Name;
   JS_ARRAY:  Item[Position].Name := '';
  end;
- Bind(Current, @Item[Position]);
+ Item[Position].Parent := Current;
+ //SimpleBind(Current, @Item[Position]);
 end;
 
 procedure TPascalJSON.Write(Name: String; Value: Double);
@@ -767,7 +785,7 @@ begin
   JS_OBJECT: Item[Position].Name := Name;
   JS_ARRAY:  Item[Position].Name := '';
  end;
- Bind(Current, @Item[Position]);
+ Item[Position].Parent := Current;
 end;
 
 procedure TPascalJSON.Write(Name: String; Value: Integer);
@@ -783,7 +801,7 @@ begin
   JS_OBJECT: Item[Position].Name := Name;
   JS_ARRAY:  Item[Position].Name := '';
  end;
- Bind(Current, @Item[Position]);
+ Item[Position].Parent := Current;
 end;
 
 procedure TPascalJSON.Write(Name: String; Value: Boolean);
@@ -799,7 +817,7 @@ begin
   JS_OBJECT: Item[Position].Name := Name;
   JS_ARRAY:  Item[Position].Name := '';
  end;
- Bind(Current, @Item[Position]);
+ Item[Position].Parent := Current;
 end;
 
 procedure TPascalJSON.WriteObj(Name: String);
@@ -835,8 +853,8 @@ var
 begin
  Result := '{' + #13#10;
  Reset;
- if Count > 0 then
- for i := 0 to Count - 1 do
+ if Count > 1 then
+ for i := 1 to Count - 1 do
  begin
   Result += toString(i);
  end;

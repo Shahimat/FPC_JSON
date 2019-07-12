@@ -20,16 +20,18 @@ begin
 
 
 
+  jsonBegin;
   jsonWrite('valroot1',8767890);
   jsonWrite('valroot2', true);
   jsonWrite('valroot3','sometext');
   jsonWriteObj('obj1');
-  jsonToChild;
-  jsonWrite('valobj1','sometext1');
-  jsonWrite('valobj2','sometext2');
-  jsonEndObj;
-  jsonToParent;
+   jsonBegin;
+   jsonWrite('valobj1','sometext1');
+   jsonWrite('valobj2','sometext2');
+   jsonEnd;
   jsonWrite('valroot4',87.6);
+  jsonEnd;
+
   writeLn(jsonString);
 
 

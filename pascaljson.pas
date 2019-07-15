@@ -20,8 +20,6 @@ const
   JS_SIMPLE:  JSset = [JS_NUMBER, JS_STRING, JS_BOOL];
   JS_COMPLEX: JSset = [JS_OBJECT, JS_ARRAY];
 
- Procedure jsonInterface(var jsonNumber: PDouble; var jsonBool: PBoolean;
-   var jsonString, jsonType: PString; var jsonError: PBoolean);
  Function JSON_LoadFromFile(FileName: String): String;
  //Function JSON_ValidationCheck(Text: String): Boolean;
 
@@ -68,7 +66,7 @@ type
    Name:      String;
    Data:      PDataBlockJSON;
    Parent:    PBlockJSON;
-   ObjEnd:    Boolean;
+   //ObjEnd:    Boolean;
    Level:     Integer;
  end;
 
@@ -79,8 +77,6 @@ type
       Item: array of PBlockJSON;
       fCount, Current: Integer;
       Procedure SetCount(Value: Integer);
-      Function  GetCountRec: Integer;
-      Procedure SetCountRec(Value: Integer);
       Function  GetLevel(i: Integer): Integer;
       Procedure Change(Value: PDataBlockJSON; OldType, NewType: JStype); Overload;
       Procedure Clear(Value: PDataBlockJSON; OldType: JStype); Overload;
@@ -95,8 +91,7 @@ type
       Procedure SetData(i: Integer; Value: Integer); Overload;
       Procedure SetData(i: Integer; Value: Boolean); Overload;
       Function  toString(i: Integer): String; Overload;
-      property  Count:    Integer read fCount      write SetCount;
-      property  CountRec: Integer read GetCountRec write SetCountRec;
+      property  Count: Integer read fCount write SetCount;
 
       //Procedure writeJSimpleType(Value: JSimpleType);
       Procedure writeJStype(Value: JStype);
@@ -282,12 +277,6 @@ begin
 
 end;
 
-procedure jsonInterface(var jsonNumber: PDouble; var jsonBool: PBoolean;
-  var jsonString, jsonType: PString; var jsonError: PBoolean);
-begin
-
-end;
-
 function JSON_LoadFromFile(FileName: String): String;
 var
  F:       TextFile;
@@ -408,7 +397,7 @@ begin
    begin
      new(Item[i]);
      Item[i]^.BlockType := JS_NONE;
-     Item[i]^.ObjEnd := FALSE;
+     //Item[i]^.ObjEnd := FALSE;
    end;
  end;
  if OldCount > Value then
@@ -422,29 +411,19 @@ begin
  end;
 end;
 
-function TPascalJSON.GetCountRec: Integer;
-begin
- //Result := Length(jsRecords);
-end;
-
-procedure TPascalJSON.SetCountRec(Value: Integer);
-begin
- //SetLength(jsRecords, Value);
-end;
-
 function TPascalJSON.GetLevel(i: Integer): Integer;
 var
  dlevel: integer;
 begin
-  if i <= 0 then
-  begin
-   Result := 0;
-   Exit;
-  end;
-  dlevel := 0;
-  if Item[i-1]^.BlockType in JS_COMPLEX then inc(dlevel);
-  if Item[i-1]^.ObjEnd then dec(dlevel);
-  Result := Item[i-1]^.Level + dlevel;
+ if i <= 0 then
+ begin
+  Result := 0;
+  Exit;
+ end;
+ dlevel := 0;
+ if Item[i]^.BlockType in JS_COMPLEX   then inc(dlevel);
+ if Item[i - 1]^.BlockType  =  JS_NONE then dec(dlevel);
+ Result := Item[i - 1]^.Level + dlevel;
 end;
 
 procedure TPascalJSON.Change(Value: PDataBlockJSON; OldType, NewType: JStype);
@@ -494,7 +473,7 @@ begin
    Item[i]^.Parent := Item[0];
    Exit;
   end;
-  if (Item[i - 1]^.BlockType in JS_SIMPLE) and not (Item[i - 1]^.ObjEnd) then
+  if Item[i - 1]^.BlockType in JS_SIMPLE then
   begin
    Item[i]^.Parent := Item[i - 1]^.Parent;
    Exit;
@@ -502,12 +481,15 @@ begin
   ds := 1;
   for j := i - 1 downto 0 do
   begin
-   if  Item[j]^.ObjEnd                                then inc(ds);
-   if  Item[j]^.BlockType in JS_COMPLEX               then dec(ds);
-   if (Item[j]^.BlockType in JS_COMPLEX) and (ds = 0) then
+   if  Item[j]^.BlockType =  JS_NONE then begin inc(ds); Continue; end;
+   if  Item[j]^.BlockType in JS_COMPLEX then
    begin
-    Item[i]^.Parent := Item[j];
-    Exit;
+    dec(ds);
+    if ds = 0 then
+    begin
+     Item[i]^.Parent := Item[j];
+     Exit;
+    end;
    end;
   end;
 end;
@@ -523,7 +505,6 @@ begin
   end;
   Name      := '';
   BlockType := JS_NONE;
-  ObjEnd    := FALSE;
   Level     := 0;
   Parent    := nil;
  end;
@@ -733,15 +714,9 @@ var
  Position: Integer;
 begin
  Position := Count;
- if not Item[Position - 1]^.ObjEnd then
- begin
-  Item[Position - 1]^.ObjEnd := TRUE;
-  Exit;
- end;
  Count := Position + 1;
  Change(Position, JS_NONE);
  BindParent(Position);
- Item[Position]^.ObjEnd := TRUE;
 end;
 
 procedure TPascalJSON.Write(Name, Value: String);

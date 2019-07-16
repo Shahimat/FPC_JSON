@@ -63,11 +63,11 @@ begin
   jsonEnd;                                                       // 38
 
   //writeLn(jsonString);
-  jsonSaveToFile('Some.json');
+  jsonSaveToFile('some.json');
 
   //writeln( JSON_LoadFromFile('Example.json') );
 
   writeLn('press Enter to exit...');
-  ReadLn;
+  //ReadLn;
 end.
 

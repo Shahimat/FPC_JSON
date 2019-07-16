@@ -55,6 +55,10 @@ type
  JSCmessage = (  JSC_RIGHT, JSC_ERROR, JSC_BRACET_NUM, JSC_FILE_EXTENSION,
    JSC_FILE_FOUND, JSC_VALID_JSON, JSC_VALID_EXTEN_LEN, JSC_VALID_EXTEN_NAME);
 
+ JSlexeme = (JSL_LETTER, JSL_DIGIT, JSL_QUOTES, JSL_DEFINITION, JSL_OPEN_BRACE,
+   JSL_CLOSE_BRACE, JSL_OPEN_BRACKET, JSL_CLOSE_BRACKET, JSL_COMMA, JSL_POINT,
+   JSL_BACKSLASH, JSL_SPACE, JSL_ENTER, JSL_TAB, JSL_OVER);
+
  PDataBlockJSON = ^TDataBlockJSON;
  PBlockJSON     = ^TBlockJSON;
 
@@ -79,23 +83,31 @@ type
       Item: array of PBlockJSON;
       fCount, Current: Integer;
       Procedure SetCount(Value: Integer);
-      Function  GetLevel(i: Integer): Integer;
       Procedure Change(Value: PDataBlockJSON; OldType, NewType: JStype); Overload;
       Procedure Clear(Value: PDataBlockJSON; OldType: JStype); Overload;
+    protected
+      (*Parser procedure's and function's*)
+       Function Lexeme(c: Char): JSlexeme;
+
+      (*Data*)
+      Function  GetLevel(i: Integer): Integer;
       Function  TabLevel(Level: Integer): String;
       Procedure BindParent(i: Integer);
-    protected
       Procedure Clear(i: Integer); Overload;
       Procedure Change(i: Integer; SomeType: JStype); Overload;
       Procedure SetData(i: Integer; Value: String); Overload;
       Procedure SetData(i: Integer; Value: Double); Overload;
       Procedure SetData(i: Integer; Value: Integer); Overload;
       Procedure SetData(i: Integer; Value: Boolean); Overload;
+
+      (*Checks*)
       Function  ConverterMessage(Code: JSCmessage): String;
       Function  objValidationCheck: JSCmessage;
       Function  jsonValidationCheck(Text: String): JSCmessage;
-      Function  toString(i: Integer): String; Overload;
       Function  jsonExpansion( FileName: String ): JSCmessage;
+
+      (*Over*)
+      Function  toString(i: Integer): String; Overload;
       Function  LoadFromFile(FileName: String; var jsonText: String): JSCmessage;
       Function  SaveToFile(FileName, Text: String): JSCmessage; Overload;
       property  Count: Integer read fCount write SetCount;
@@ -355,6 +367,29 @@ begin
  Change(Value, OldType, JS_NONE);
 end;
 
+{$DEFINE corr := :Result:=}
+function TPascalJSON.Lexeme(c: Char): JSlexeme;
+begin
+ case c of
+  'a'..'z','A'..'Z','_' corr JSL_LETTER;
+  '0'..'9' corr JSL_DIGIT;
+  '.'      corr JSL_POINT;
+  ','      corr JSL_COMMA;
+  '{'      corr JSL_OPEN_BRACE;
+  '}'      corr JSL_CLOSE_BRACE;
+  '['      corr JSL_OPEN_BRACKET;
+  ']'      corr JSL_CLOSE_BRACKET;
+  '"'      corr JSL_QUOTES;
+  ':'      corr JSL_DEFINITION;
+  '\'      corr JSL_BACKSLASH;
+  ' '      corr JSL_SPACE;
+  #13,#10  corr JSL_ENTER;
+  #9       corr JSL_TAB;
+  else
+   Result := JSL_OVER;
+ end;
+end;
+
 function TPascalJSON.TabLevel(Level: Integer): String;
 var
  i: Integer;
@@ -559,7 +594,7 @@ end;
 
 function TPascalJSON.jsonExpansion(FileName: String): JSCmessage;
 var
- a, i: Integer;
+ i: Integer;
  s: String;
 begin
  Result := JSC_ERROR;

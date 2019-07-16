@@ -21,7 +21,7 @@ begin
 
 
 
-
+  jsonClear;
   jsonBegin(JS_OBJECT);                                          //  0
    jsonBegin(JS_OBJECT, 'first');                                //  1
     jsonWrite('first',34);                                       //  2
@@ -54,7 +54,7 @@ begin
       jsonWrite(TRUE);                                           // 29
       jsonBegin(JS_OBJECT);                                      // 30
        jsonWrite('end','no');                                    // 31
-       jsonWrite('big int',645678907654232);                     // 32
+       jsonWrite('big int',64567890);                            // 32
       jsonEnd;                                                   // 33
      jsonEnd;                                                    // 34
     jsonEnd;                                                     // 35
@@ -62,20 +62,8 @@ begin
    jsonWrite('description','some    JSON converter?     yeah!'); // 37
   jsonEnd;                                                       // 38
 
-
-  //jsonBegin(JS_OBJECT);
-  //jsonWrite('valroot1',8767890);
-  //jsonWrite('valroot2', true);
-  //jsonWrite('valroot3','sometext');
-  // jsonBegin(JS_OBJECT,'obj1');
-  // jsonWrite('valobj1','sometext1');
-  // jsonWrite('valobj2','sometext2');
-  // jsonEnd;
-  //jsonWrite('valroot4',87.6);
-  //jsonEnd;
-
-  writeLn(jsonString);
-
+  //writeLn(jsonString);
+  jsonSaveToFile('Some.json');
 
   //writeln( JSON_LoadFromFile('Example.json') );
 

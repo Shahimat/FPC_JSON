@@ -1,0 +1,40 @@
+{
+	"first": {
+		"first": 34,
+		"second": 87.2,
+		"array": [
+			34,
+			89,
+			"+",
+			{
+				"array": [
+				],
+				"clean": {
+					"array": [
+						"yes"
+					]
+				}
+			}
+		]
+	},
+	"second": [
+		1,
+		20.45,
+		false,
+		true,
+		"what you say?",
+		{
+			"maybe true": "ok",
+			"some": [
+				234,
+				true,
+				{
+					"end": "no",
+					"big int": 64567890
+				}
+			]
+		}
+	],
+	"description": "some    JSON converter?     yeah!"
+}
+

@@ -20,7 +20,7 @@ const
   JS_SIMPLE:  JSset = [JS_NUMBER, JS_STRING, JS_BOOL];
   JS_COMPLEX: JSset = [JS_OBJECT, JS_ARRAY];
 
- Function JSON_LoadFromFile(FileName: String): String;
+ //Function JSON_LoadFromFile(FileName: String): String;
  //Function JSON_ValidationCheck(Text: String): Boolean;
 
  Procedure jsonWrite(Name, Value: String); Overload;
@@ -52,6 +52,9 @@ uses SysUtils, debugger;
 
 type
 
+ JSCmessage = (  JSC_RIGHT, JSC_ERROR, JSC_BRACET_NUM, JSC_FILE_EXTENSION,
+   JSC_FILE_FOUND, JSC_VALID_JSON, JSC_VALID_EXTEN_LEN, JSC_VALID_EXTEN_NAME);
+
  PDataBlockJSON = ^TDataBlockJSON;
  PBlockJSON     = ^TBlockJSON;
 
@@ -66,7 +69,6 @@ type
    Name:      String;
    Data:      PDataBlockJSON;
    Parent:    PBlockJSON;
-   //ObjEnd:    Boolean;
    Level:     Integer;
  end;
 
@@ -81,7 +83,6 @@ type
       Procedure Change(Value: PDataBlockJSON; OldType, NewType: JStype); Overload;
       Procedure Clear(Value: PDataBlockJSON; OldType: JStype); Overload;
       Function  TabLevel(Level: Integer): String;
-      Function  toString(Value: PDataBlockJSON): String; Overload;
       Procedure BindParent(i: Integer);
     protected
       Procedure Clear(i: Integer); Overload;
@@ -90,7 +91,13 @@ type
       Procedure SetData(i: Integer; Value: Double); Overload;
       Procedure SetData(i: Integer; Value: Integer); Overload;
       Procedure SetData(i: Integer; Value: Boolean); Overload;
+      Function  ConverterMessage(Code: JSCmessage): String;
+      Function  objValidationCheck: JSCmessage;
+      Function  jsonValidationCheck(Text: String): JSCmessage;
       Function  toString(i: Integer): String; Overload;
+      Function  jsonExpansion( FileName: String ): JSCmessage;
+      Function  LoadFromFile(FileName: String; var jsonText: String): JSCmessage;
+      Function  SaveToFile(FileName, Text: String): JSCmessage; Overload;
       property  Count: Integer read fCount write SetCount;
 
       //Procedure writeJSimpleType(Value: JSimpleType);
@@ -112,6 +119,8 @@ type
       Procedure   toRoot;
       Procedure   jsonBegin(SomeType: JStype; Name: String);
       Procedure   jsonEnd;
+      Function    SaveToFile(FileName: String): JSCmessage; Overload;
+      Procedure   Parse(Text: String);
       Procedure   Write(Name, Value: String); Overload;
       Procedure   Write(Name: String; Value: Double);  Overload;
       Procedure   Write(Name: String; Value: Integer); Overload;
@@ -139,28 +148,6 @@ begin
  if Item[position]^.Parent^.BlockType = JS_OBJECT then
     Item[Position]^.Name := Name;
 end;}
-
-Function isJSONexpansion( FileName: String ): Boolean;
-var
- a, i: Integer;
- s: String;
-begin
- Result := false;
- s := '';
- if FileName = '' then Exit;
- For i := Length(FileName) downto 1 do
- begin
-  if FileName[i] = '.' then
-  begin
-   if (length(s) <> 4) or (i = 1) then Exit;
-   if  (s[1] in ['j','J']) and (s[2] in ['s','S'])
-   and (s[3] in ['o','O']) and (s[4] in ['n','N']) then Result := True;
-   Exit;
-  end;
-  s := FileName[i] + s;
-  if length(s) > 4 then Exit;
- end;
-end;
 
 Function Compress(Text: String): String;
 var
@@ -206,47 +193,6 @@ begin
  end;
 end;
 
-function JSON_ValidationCheck(Text: String): Boolean;
-var
- i: integer;
- numBraces, numSqrBrackets: Integer;
- Quotes, Colon: Boolean;
-begin
- // Необходимо донастроить, включая проблемы с сиюминутным сжатием вопрос решить
- Result := True;
- Exit;
-
- Text := CompressDefinitions(Text);
- Result := False;
- Quotes := False;
- Colon  := False;
- numBraces := 0;
- numSqrBrackets := 0;
- if Text = '' then Exit;
- if (Text[1] <> '{') or (Text[Length(Text)] <> '}') then Exit;
- for i := 2 to Length(Text) - 1 do
- case Text[i] of
-  '"': Quotes := not Quotes;
-  '{': if not Quotes then inc(numBraces);
-  '}': if not Quotes then dec(numBraces);
-  '[': if not Quotes then inc(numSqrBrackets);
-  ']': if not Quotes then dec(numSqrBrackets);
-  ',': if not Quotes then
-    begin
-     if Text[i + 1] in ['}',']'] then Exit;
-     Colon := False;
-    end;
-  ':': if not Quotes then
-    begin
-     if not Colon then Colon := True
-                  else Exit;
-     if Text[i - 1] <> '"' then Exit;
-    end;
- end;
- if (numBraces <> 0) or (numSqrBrackets <> 0) or (Quotes) then Exit;
- Result := True;
-end;
-
 Procedure Analys(Text: String);
 var
  i: Integer;
@@ -275,41 +221,6 @@ begin
   else S += Text[i];
  end;
 
-end;
-
-function JSON_LoadFromFile(FileName: String): String;
-var
- F:       TextFile;
- Text, s: String;
-begin
- if not isJSONexpansion(FileName) then
- begin
-  Result := 'error: the file extension is incorrect';
-  Exit;
- end;
- if not FileExists( FileName ) then
- begin
-  Result := 'error: file not found';
-  Exit;
- end;
- Text := '';
- AssignFile(F, FileName);
- Reset(F);
- while not EOF(F) do
- begin
-  ReadLn(F, s);
-  Text += s;
- end;
- if not JSON_ValidationCheck(Text) then
- begin
-  Result := 'error: downloaded text file does not match JSON format';
-  Exit;
- end;
- Text := Compress( Text );
- Analys( Text );
- Result := 'JSON format loaded from ' + FileName;
- Result := Text;
- CloseFile(F);
 end;
 
 procedure jsonWrite(Name,         Value: String);  JSONWRITE_NAME_VALUE
@@ -353,7 +264,7 @@ end;
 
 procedure jsonSaveToFile(FileName: String);
 begin
-
+ jsonMain.SaveToFile(FileName);
 end;
 
 procedure jsonClear;
@@ -397,7 +308,6 @@ begin
    begin
      new(Item[i]);
      Item[i]^.BlockType := JS_NONE;
-     //Item[i]^.ObjEnd := FALSE;
    end;
  end;
  if OldCount > Value then
@@ -421,8 +331,8 @@ begin
   Exit;
  end;
  dlevel := 0;
- if Item[i]^.BlockType in JS_COMPLEX   then inc(dlevel);
- if Item[i - 1]^.BlockType  =  JS_NONE then dec(dlevel);
+ if Item[i - 1]^.BlockType in JS_COMPLEX then inc(dlevel);
+ if Item[i]^.BlockType  =  JS_NONE       then dec(dlevel);
  Result := Item[i - 1]^.Level + dlevel;
 end;
 
@@ -452,16 +362,6 @@ begin
  Result := '';
  for i := 0 to Level - 1 do
    Result += #9;
-end;
-
-function TPascalJSON.toString(Value: PDataBlockJSON): String;
-begin
- //case Value^.BlockType of
- // JS_NUMBER: Result := FloatToStr(Value^.numData^);
- // JS_STRING: Result := '"' + Value^.strData^ + '"';
- // JS_BOOL:   if Value^.boolData^ then Result := 'true'
- //                                 else Result := 'false';
- //end;
 end;
 
 procedure TPascalJSON.BindParent(i: Integer);
@@ -554,37 +454,182 @@ begin
  Item[i]^.Data^.boolData^ := Value;
 end;
 
+function TPascalJSON.ConverterMessage(Code: JSCmessage): String;
+begin
+ case Code of
+   JSC_RIGHT:            Result := 'right';
+   JSC_ERROR:            Result := 'unknown error';
+   JSC_BRACET_NUM:       Result := 'different number of brackets';
+   JSC_FILE_EXTENSION:   Result := 'the file extension is incorrect';
+   JSC_FILE_FOUND:       Result := 'file not found';
+   JSC_VALID_JSON:       Result := 'text file does not match JSON format';
+   JSC_VALID_EXTEN_LEN:  Result := 'extension length is not equal to format length';
+   JSC_VALID_EXTEN_NAME: Result := 'extension name is not "JSON"';
+  else
+   Result := 'unknown error';
+ end;
+ if Code <> JSC_RIGHT then Result := 'Error: ' + Result;
+end;
+
+function TPascalJSON.objValidationCheck: JSCmessage;
+var
+ i, ds: Integer;
+begin
+ ds := 0;
+ for i := 0 to Count - 1 do
+ with Item[i]^ do
+ begin
+  if BlockType in JS_COMPLEX then inc(ds);
+  if BlockType =  JS_NONE    then dec(ds);
+ end;
+ if ds <> 0 then
+ begin
+  Result := JSC_BRACET_NUM;
+  Exit;
+ end;
+ Result := JSC_RIGHT;
+end;
+
+function TPascalJSON.jsonValidationCheck(Text: String): JSCmessage;
+var
+ i: integer;
+ numBraces, numSqrBrackets: Integer;
+ Quotes, Colon: Boolean;
+begin
+ // Необходимо донастроить, включая проблемы с сиюминутным сжатием вопрос решить
+ Result := JSC_RIGHT;
+ Exit;
+
+ Text := CompressDefinitions(Text);
+ //Result := False;
+ Quotes := False;
+ Colon  := False;
+ numBraces := 0;
+ numSqrBrackets := 0;
+ if Text = '' then Exit;
+ if (Text[1] <> '{') or (Text[Length(Text)] <> '}') then Exit;
+ for i := 2 to Length(Text) - 1 do
+ case Text[i] of
+  '"': Quotes := not Quotes;
+  '{': if not Quotes then inc(numBraces);
+  '}': if not Quotes then dec(numBraces);
+  '[': if not Quotes then inc(numSqrBrackets);
+  ']': if not Quotes then dec(numSqrBrackets);
+  ',': if not Quotes then
+    begin
+     if Text[i + 1] in ['}',']'] then Exit;
+     Colon := False;
+    end;
+  ':': if not Quotes then
+    begin
+     if not Colon then Colon := True
+                  else Exit;
+     if Text[i - 1] <> '"' then Exit;
+    end;
+ end;
+ if (numBraces <> 0) or (numSqrBrackets <> 0) or (Quotes) then Exit;
+ Result := JSC_RIGHT;
+end;
+
 function TPascalJSON.toString(i: Integer): String;
-const
- TEXT_END = #13#10;
 begin
  with Item[i]^ do
  begin
   case BlockType of
    JS_STRING: Result := '"' + Data^.strData^ + '"';
    JS_NUMBER: Result := FloatToStr(Data^.numData^);
-   JS_BOOL: if Data^.boolData^ then Result := 'TRUE'
-                               else Result := 'FALSE';
+   JS_BOOL: if Data^.boolData^ then Result := 'true'
+                               else Result := 'false';
    JS_OBJECT: Result := '{';
    JS_ARRAY:  Result := '[';
-   JS_NONE:   Result := '';
-  end;
-  if (Name <> '') and (i > 0) then Result := '"' + Name + '": ' + Result;
-  Result := TabLevel(Level) + Result;
-  if not (BlockType in JS_COMPLEX) and (not ObjEnd) then Result := Result + ',';
-  if ObjEnd then
-  case BlockType of
-   JS_OBJECT: Result := Result + '}';
-   JS_ARRAY:  Result := Result + ']';
-   else
-    if BlockType <> JS_NONE then Result := Result + TEXT_END;
-    Result := Result + TabLevel(Level - 1);
+   JS_NONE:
     case Parent^.BlockType of
-     JS_OBJECT: Result := Result + '}';
-     JS_ARRAY:  Result := Result + ']';
+     JS_OBJECT: Result := '}';
+     JS_ARRAY:  Result := ']';
     end;
   end;
-  Result := Result + TEXT_END;
+  if (Name <> '') and (i > 0) and (BlockType <> JS_NONE) then
+    Result := '"' + Name + '": ' + Result;
+  if i < Count - 1 then
+  if (Item[i + 1]^.BlockType <> JS_NONE) and not (BlockType in JS_COMPLEX) then
+    Result := Result + ',';
+  Result := TabLevel(Level) + Result + #13#10;
+ end;
+end;
+
+function TPascalJSON.jsonExpansion(FileName: String): JSCmessage;
+var
+ a, i: Integer;
+ s: String;
+begin
+ Result := JSC_ERROR;
+ s := '';
+ if FileName = '' then Exit;
+ For i := Length(FileName) downto 1 do
+ begin
+  if FileName[i] = '.' then
+  begin
+   if (length(s) <> 4) or (i = 1) then Exit;
+   if  (s[1] in ['j','J']) and (s[2] in ['s','S'])
+   and (s[3] in ['o','O']) and (s[4] in ['n','N']) then Result := JSC_RIGHT
+                                                   else Result := JSC_VALID_EXTEN_NAME;
+   Exit;
+  end;
+  s := FileName[i] + s;
+  if length(s) > 4 then
+  begin
+   Result := JSC_VALID_EXTEN_LEN;
+   Exit;
+  end;
+ end;
+end;
+
+function TPascalJSON.LoadFromFile(FileName: String; var jsonText: String
+  ): JSCmessage;
+var
+ F: TextFile;
+ s: String;
+begin
+ Result := jsonExpansion(FileName);
+ if Result <> JSC_RIGHT then Exit;
+ if not FileExists( FileName ) then
+ begin
+  Result := JSC_FILE_FOUND;
+  Exit;
+ end;
+ try
+  jsonText := '';
+  AssignFile(F, FileName);
+  Reset(F);
+  while not EOF(F) do
+  begin
+   ReadLn(F, s);
+   jsonText += s;
+  end;
+  Result := jsonValidationCheck(jsonText);
+  if Result <> JSC_RIGHT then Exit;
+  Result := JSC_RIGHT;
+ finally
+  CloseFile(F);
+ end;
+end;
+
+function TPascalJSON.SaveToFile(FileName, Text: String): JSCmessage;
+var
+ F: TextFile;
+begin
+ Result := jsonExpansion(FileName);
+ if Result <> JSC_RIGHT then Exit;
+ Result := objValidationCheck;
+ if Result <> JSC_RIGHT then Exit;
+ if FileExists( FileName ) then DeleteFile(FileName);
+ try
+  AssignFile(F, FileName);
+  Rewrite(F);
+  WriteLn(F, Text);
+  Result := JSC_RIGHT;
+ finally
+  CloseFile(F);
  end;
 end;
 
@@ -719,6 +764,17 @@ begin
  BindParent(Position);
 end;
 
+function TPascalJSON.SaveToFile(FileName: String): JSCmessage;
+begin
+ Result := SaveToFile(FileName, toString);
+end;
+
+procedure TPascalJSON.Parse(Text: String);
+begin
+ Clear;
+
+end;
+
 procedure TPascalJSON.Write(Name, Value: String);
 const BlockType = JS_STRING; WRITE_NAME_VALUE
 
@@ -734,7 +790,14 @@ const BlockType = JS_BOOL;   WRITE_NAME_VALUE
 function TPascalJSON.toString: String;
 var
  i: Integer;
+ msg: JSCmessage;
 begin
+ msg := objValidationCheck;
+ if msg <> JSC_RIGHT then
+ begin
+  Result := ConverterMessage(msg);
+  Exit;
+ end;
  Result := '';
  if Count > 0 then for i := 0 to Count - 1 do Result += toString(i)
               else Result := '{' + #13#10 + '}';

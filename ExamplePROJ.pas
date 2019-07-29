@@ -2,10 +2,9 @@ program ExamplePROJ;
 
 {$APPTYPE CONSOLE}
 
-uses PascalJSON, debugger;
+uses PascalJSON;
 
 begin
-
   //writeln(isJSONformat('wrgmnrogjn.json'));
   //writeln(isJSONformat('wrgvw2g.JSoN'));
   //writeln(isJSONformat('/wlvgno.SONJ'));
@@ -17,7 +16,14 @@ begin
 
 
   //Console.Log(N, S);
-
+  //J := TStringStack.Create;
+  //J.Push('Da');
+  //J.Push('vaaaa');
+  //WriteLn(J.Top());
+  //J.Pop;
+  //WriteLn(J.Top());
+  ////J.Pop;
+  //J.Destroy;
 
 
 
@@ -62,8 +68,9 @@ begin
    jsonWrite('description','some    JSON converter?     yeah!'); // 37
   jsonEnd;                                                       // 38
 
-  //writeLn(jsonString);
-  jsonSaveToFile('some.json');
+  (*Sample output in json view*)
+  writeLn(jsonString);
+  jsonSaveToFile('Output.json');
 
   //writeln( JSON_LoadFromFile('Example.json') );
 

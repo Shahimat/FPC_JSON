@@ -1,8 +1,10 @@
-*.exe
+# *.exe
 *.lpi
 *.lps
 *.idea
 *.log
+*.dbg
+*.ebnf
 /lib
 /backup
-some.json
+Output.json

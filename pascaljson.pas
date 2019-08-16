@@ -12,13 +12,16 @@ unit PascalJSON;
 
 interface
 
+uses PascalParserJSON;
+
 type
-  JStype = (  JS_NONE, JS_NUMBER, JS_STRING, JS_BOOL, JS_OBJECT, JS_ARRAY );
-  JSset  = set of JStype;
+  jsType = (  JS_NONE, JS_NUMBER, JS_STRING, JS_BOOL, JS_OBJECT, JS_ARRAY );
+  jsSet  = set of jsType;
 
 const
-  JS_SIMPLE:  JSset = [JS_NUMBER, JS_STRING, JS_BOOL];
-  JS_COMPLEX: JSset = [JS_OBJECT, JS_ARRAY];
+  //JS_BOOL:    jsSet = [JS_TRUE, JS_FALSE];
+  JS_SIMPLE:  jsSet = [JS_NUMBER, JS_STRING, JS_BOOL];
+  JS_COMPLEX: jsSet = [JS_OBJECT, JS_ARRAY];
 
  //Function JSON_LoadFromFile(FileName: String): String;
  //Function JSON_ValidationCheck(Text: String): Boolean;
@@ -31,10 +34,10 @@ const
  Procedure jsonWrite(Value: Double); Overload;
  Procedure jsonWrite(Value: Integer); Overload;
  Procedure jsonWrite(Value: Boolean); Overload;
- Procedure jsonBegin(SomeType: JStype; Name: String = '');
+ Procedure jsonBegin(SomeType: jsType; Name: String = '');
  Procedure jsonEnd;
  Procedure jsonToRoot;
- //Function  jsonFind(Name: String; ElemType: JStype): Integer;
+ //Function  jsonFind(Name: String; ElemType: jsType): Integer;
  Procedure jsonRead(Text: String);
  Procedure jsonCD(Text: String);
  Procedure jsonSaveToFile(FileName: String);
@@ -48,103 +51,37 @@ const
 
 implementation
 
-uses SysUtils, GStack;
+uses SysUtils;
 
 type
 
- JSCmessage = (JSC_RIGHT, JSC_ERROR, JSC_BRACET_NUM, JSC_FILE_EXTENSION,
-   JSC_FILE_FOUND, JSC_VALID_JSON, JSC_VALID_EXTEN_LEN, JSC_VALID_EXTEN_NAME);
+ //JSCmessage = (JSI_RIGHT, JSI_ERROR, JSI_BRACET_NUM, JSI_FILE_EXTENSION,
+ //  JSI_FILE_FOUND, JSI_VALID_JSON, JSI_VALID_EXTEN_LEN, JSI_VALID_EXTEN_NAME);
 
- // parenthesis ()
- // bracket     []
- // brace       {}
- // quotes      ""
- // colon       :
- // comma       ,
- JSlexeme = (JSL_LETTER, JSL_DIGIT19, JSL_NULL, JSL_QUOTES, JSL_DEFINITION,
-   JSL_OPEN_BRACE, JSL_CLOSE_BRACE, JSL_OPEN_BRACKET, JSL_CLOSE_BRACKET,
-   JSL_COMMA, JSL_POINT, JSL_BACKSLASH, JSL_SKIP, JSL_PLUS, JSL_MINUS, JSL_OVER);
+jsPInfoType = ^jsInfoType;
+jsInfoType  = (JSI_RIGHT, JSI_ERROR, JSI_ERROR_EXPECTED, JSI_ERROR_UNTYPE,
+  JSI_ERROR_STRING_OUT, JSI_ERROR_INCOMPLETE, JSI_ERROR_SYNTAX_NOT_COMPLETED,
+  JSI_ERROR_LEXER_OUT_OF_SYNTAX, JSI_ERROR_NO_DATA);
 
- JSterm = (
-   (*Terminals*)
-   JST_STRING, JST_NUMBER, JST_TRUE, JST_FALSE, JST_NULL, JST_COLON,
-   JST_COMMA, JST_OPEN_BRACKET, JST_CLOSE_BRACKET, JST_OPEN_BRACE,
-   JST_CLOSE_BRACE, JST_EPS, JST_OUT,
-   (*Nonterminals (laws)*)
-   JSN_JSTEXT, JSN_O, JSN_OO, JSN_OOO, JSN_A, JSN_AA, JSN_AAA, JSN_V, JSN_M
- );
+(* TControllerBlock *)
 
- jsonTermStack = specialize TStack<JSterm>;
- PPascalJSON = ^TPascalJSON;
-
-{ TParserJSON }
-
-TParserJSON = class
-  private
-    jsonObj: PPascalJSON;
-
-    Value:     String;
-    NumStep:   Integer;
-    Symbols:   PString;
-    Position:  Integer;
-    CurLex:    JSlexeme;
-
-    (*Parse variables*)
-    Stack:     jsonTermStack;
-    CurTerm:   JSterm;
-    CurLaw:    JSterm;
-    ParseInfo: JSCmessage;
-    ValName:   String;
-    isObj:     Boolean;
-
-    Function  GetChar: Char; inline;
-    Procedure SetLexeme; inline;
-    Function  Lexeme(c: Char): JSlexeme;
-    Function  GetStr: String; Overload; inline;
-    Function  GetNum: Double; Overload; inline;
-    Function  GetBool(Val: Boolean): Boolean; Overload; inline;
-  protected
-    Procedure toStart;
-    Function  StepTerm: Boolean;
-    Procedure Push(ValType: JSterm); Overload;
-    Procedure Push(const ValTypes: array of JSterm); Overload;
-    Procedure Pop;
-    Function toJST_STRING: Boolean; inline;
-    Function toJST_NUMBER: Boolean; inline;
-    Function toJST_TRUE: Boolean; inline;
-    Function toJST_FALSE: Boolean; inline;
-    Function toJST_NULL: Boolean; inline;
-    Function toJST_COLON: Boolean; inline;
-    Function toJST_COMMA: Boolean; inline;
-    Function toJST_OPEN_BRACKET: Boolean; inline;
-    Function toJST_CLOSE_BRACKET: Boolean; inline;
-    Function toJST_OPEN_BRACE: Boolean; inline;
-    Function toJST_CLOSE_BRACE: Boolean; inline;
-    Function toJST_EPS: Boolean; inline;
-    Function toJST_OUT: Boolean; inline;
-    Property C:  Char read GetChar;
-    Property LC: JSlexeme read CurLex;
-
-    (*Parse Procedures*)
-    Procedure GetTerminal;
-    Function  ParseStep(isStackEmpty: Boolean): Boolean;
-
-    Procedure toJSN_JSTEXT;
-    Procedure toJSN_O;
-    Procedure toJSN_OO;
-    Procedure toJSN_OOO;
-    Procedure toJSN_A;
-    Procedure toJSN_AA;
-    Procedure toJSN_AAA;
-    Procedure toJSN_V;
-    Procedure toJSN_M;
-  public
-    Constructor Create;
-    Destructor  Destroy; Override;
-    Procedure   Clear;
-    Function  Parse(Text: PString): JSCmessage;
-    Procedure Bind(SomePascalJSON: PPascalJSON);
-    //Procedure   NextLaw;
+PControllerBlock = ^TControllerBlock;
+TControllerBlock = class
+ private
+  isError: Boolean;
+  Info: jsInfoType;
+  Param1, Param2: String;
+  Function ErrorMessages: Boolean;
+ public
+  Constructor Create;
+  Property  Err: Boolean read isError;
+  Function  GetInfo: String;
+  Procedure Reset;
+  Procedure Msg(Message: jsInfoType; SomeParam: String); Overload;
+  Procedure Msg(Message: jsInfoType); Overload;
+  Procedure Bind(var SomeErr: PBoolean); Overload;
+  Procedure Bind(var SomeInfo: jsPInfoType); Overload;
+  Procedure Error;
 end;
 
  PDataBlockJSON = ^TDataBlockJSON;
@@ -157,39 +94,37 @@ end;
  end;
 
  TBlockJSON = packed record
-   BlockType: JStype;
+   BlockType: jsType;
    Name:      String;
    Data:      PDataBlockJSON;
    Parent:    PBlockJSON;
    Level:     Integer;
  end;
 
-{ TPascalJSON }
+(* TPascalJSON *)
 
 TPascalJSON = class
   private
     Item: array of PBlockJSON;
     fCount, Current: Integer;
     Procedure SetCount(Value: Integer);
-    Procedure Change(Value: PDataBlockJSON; OldType, NewType: JStype); Overload;
-    Procedure Clear(Value: PDataBlockJSON; OldType: JStype); Overload;
+    Procedure Change(Value: PDataBlockJSON; OldType, NewType: jsType); Overload;
+    Procedure Clear(Value: PDataBlockJSON; OldType: jsType); Overload;
   protected
     (*Data*)
     Function  GetLevel(i: Integer): Integer;
     Function  TabLevel(Level: Integer): String;
     Procedure BindParent(i: Integer);
     Procedure Clear(i: Integer); Overload;
-    Procedure Change(i: Integer; SomeType: JStype); Overload;
+    Procedure Change(i: Integer; SomeType: jsType); Overload;
     Procedure SetData(i: Integer; Value: String); Overload;
     Procedure SetData(i: Integer; Value: Double); Overload;
     Procedure SetData(i: Integer; Value: Integer); Overload;
     Procedure SetData(i: Integer; Value: Boolean); Overload;
 
     (*Checks*)
-    Function  ConverterMessage(Code: JSCmessage): String;
-    Function  objValidationCheck: JSCmessage;
-    Function  jsonValidationCheck(Text: String): JSCmessage;
-    Function  jsonExpansion( FileName: String ): JSCmessage;
+    //Function  ConverterMessage(Code: JSCmessage): String;
+    //Function  jsonExpansion( FileName: String ): JSCmessage;
 
     (*Over*)
     Function  toString(i: Integer): String; Overload;
@@ -201,7 +136,7 @@ TPascalJSON = class
     Destructor  Destroy; Override;
     Procedure   Clear; Overload;
     Procedure   toRoot;
-    Procedure   jsonBegin(SomeType: JStype; Name: String);
+    Procedure   jsonBegin(SomeType: jsType; Name: String);
     Procedure   jsonEnd;
     Function    SaveToFile(FileName: String): JSCmessage; Overload;
     Procedure   Parse(Text: String);
@@ -214,7 +149,6 @@ end;
 
 var
  jsonMain:   TPascalJSON;
- jsonParser: TParserJSON;
 
 {$MACRO ON}
 
@@ -318,7 +252,7 @@ procedure jsonWrite(Value: Double);  JSONWRITE_VALUE
 procedure jsonWrite(Value: Integer); JSONWRITE_VALUE
 procedure jsonWrite(Value: Boolean); JSONWRITE_VALUE
 
-procedure jsonBegin(SomeType: JStype; Name: String);
+procedure jsonBegin(SomeType: jsType; Name: String);
 begin
  jsonMain.jsonBegin(SomeType, Name);
 end;
@@ -333,7 +267,7 @@ begin
  jsonMain.toRoot;
 end;
 
-//function jsonFind(Name: String; ElemType: JStype): Integer;
+//function jsonFind(Name: String; ElemType: jsType): Integer;
 //begin
 //
 //end;
@@ -378,446 +312,84 @@ begin
  Result := jsonMain.toString;
 end;
 
-{ TParserJSON }
+{ TControllerBlock }
 
-function TParserJSON.GetChar: Char;
+function TControllerBlock.ErrorMessages: Boolean;
 begin
- Result := Symbols^[Position];
-end;
-
-function TParserJSON.StepTerm: Boolean;
-begin
- inc(Position);
- SetLexeme;
- case CurTerm of
-  JST_STRING         corr toJST_STRING;
-  JST_NUMBER         corr toJST_NUMBER;
-  JST_TRUE           corr toJST_TRUE;
-  JST_FALSE          corr toJST_FALSE;
-  JST_NULL           corr toJST_NULL;
-  JST_COLON          corr toJST_COLON;
-  JST_COMMA          corr toJST_COMMA;
-  JST_OPEN_BRACKET   corr toJST_OPEN_BRACKET;
-  JST_CLOSE_BRACKET  corr toJST_CLOSE_BRACKET;
-  JST_OPEN_BRACE     corr toJST_OPEN_BRACE;
-  JST_CLOSE_BRACE    corr toJST_CLOSE_BRACE;
-  JST_EPS            corr toJST_EPS;
-  JST_OUT            corr toJST_OUT;
+ case Info of
+  JSI_ERROR,
+  JSI_ERROR_EXPECTED,
+  JSI_ERROR_UNTYPE,
+  JSI_ERROR_STRING_OUT,
+  JSI_ERROR_INCOMPLETE,
+  JSI_ERROR_SYNTAX_NOT_COMPLETED,
+  JSI_ERROR_LEXER_OUT_OF_SYNTAX,
+  JSI_ERROR_NO_DATA:
+        Result := TRUE;
+  else  Result := FALSE;
  end;
 end;
 
-procedure TParserJSON.SetLexeme;
+constructor TControllerBlock.Create;
 begin
- CurLex := Lexeme( C );
+ isError := TRUE;
+ Info    := JSI_ERROR_NO_DATA;
 end;
 
-function TParserJSON.Lexeme(c: Char): JSlexeme;
+function TControllerBlock.GetInfo: String;
 begin
- case c of
-  'a'..'z','A'..'Z','_'
-                 corr JSL_LETTER;
-  '1'..'9'       corr JSL_DIGIT19;
-  '0'            corr JSL_NULL;
-  '.'            corr JSL_POINT;
-  ','            corr JSL_COMMA;
-  '{'            corr JSL_OPEN_BRACE;
-  '}'            corr JSL_CLOSE_BRACE;
-  '['            corr JSL_OPEN_BRACKET;
-  ']'            corr JSL_CLOSE_BRACKET;
-  '"'            corr JSL_QUOTES;
-  ':'            corr JSL_DEFINITION;
-  '\'            corr JSL_BACKSLASH;
-  '+'            corr JSL_PLUS;
-  '-'            corr JSL_MINUS;
-  ' ',#13,#10,#9 corr JSL_SKIP;
-  else
-   Result := JSL_OVER;
+ case Info of
+  JSI_RIGHT:            Result := 'All right';
+  JSI_ERROR:            Result := 'Error: Unknown error';
+  JSI_ERROR_EXPECTED:   Result := 'Error: Expected ' + Param1;
+  JSI_ERROR_UNTYPE:     Result := 'Error: Unknown type';
+  JSI_ERROR_STRING_OUT: Result := 'Error: Out of string';
+  JSI_ERROR_INCOMPLETE: Result := 'Error: Out of text';
+  JSI_ERROR_NO_DATA:    Result := 'Error: No data';
+  JSI_ERROR_SYNTAX_NOT_COMPLETED: Result := 'Error: Syntax not completed';
+  JSI_ERROR_LEXER_OUT_OF_SYNTAX:  Result := 'Error: Lexer out of syntax';
+  else                  Result := 'Error: Unknown information';
  end;
 end;
 
-function TParserJSON.GetStr: String;
+procedure TControllerBlock.Reset;
 begin
- Result := Value;
- //toStart;
+ Info    := JSI_RIGHT;
+ isError := FALSE;
+ Param1  := '';
+ Param2  := '';
 end;
 
-function TParserJSON.GetNum: Double;
+procedure TControllerBlock.Msg(Message: jsInfoType; SomeParam: String);
 begin
- Result := StrToFloat( Value );
- //toStart;
+ Info    := Message;
+ isError := ErrorMessages;
+ Param1  := SomeParam;
+ Param2  := '';
 end;
 
-function TParserJSON.GetBool(Val: Boolean): Boolean;
+procedure TControllerBlock.Msg(Message: jsInfoType);
 begin
- //if Length(Value) >= 4 then
- //Result := (Value[1] = 't') and (Value[2] = 'r') and
- //          (Value[3] = 'u') and (Value[4] = 'e') else Result := False;
- Result := Val;
- //toStart;
+ Info    := Message;
+ isError := ErrorMessages;
+ Param1  := '';
+ Param2  := '';
 end;
 
-procedure TParserJSON.toStart;
+procedure TControllerBlock.Bind(var SomeErr: PBoolean);
 begin
- CurTerm := JST_EPS;
- NumStep := 0;
- Value   := '';
+ SomeErr := @isError;
 end;
 
-procedure TParserJSON.Push(ValType: JSterm);
+procedure TControllerBlock.Bind(var SomeInfo: jsPInfoType);
 begin
- Stack.Push( ValType );
+ SomeInfo := @Info;
 end;
 
-procedure TParserJSON.Push(const ValTypes: array of JSterm);
-var
- i: Integer;
+procedure TControllerBlock.Error;
 begin
- for i := High(ValTypes) downto Low(ValTypes) do Stack.Push( ValTypes[i] );
-end;
-
-procedure TParserJSON.Pop;
-begin
- CurLaw := Stack.Top;
- Stack.Pop;
-end;
-
-function TParserJSON.toJST_STRING: Boolean;
-begin
-
-end;
-
-function TParserJSON.toJST_NUMBER: Boolean;
-begin
-
-end;
-
-function TParserJSON.toJST_TRUE: Boolean;
-begin
-
-end;
-
-function TParserJSON.toJST_FALSE: Boolean;
-begin
-
-end;
-
-function TParserJSON.toJST_NULL: Boolean;
-begin
-
-end;
-
-function TParserJSON.toJST_COLON: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-function TParserJSON.toJST_COMMA: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-function TParserJSON.toJST_OPEN_BRACKET: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-function TParserJSON.toJST_CLOSE_BRACKET: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-function TParserJSON.toJST_OPEN_BRACE: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-function TParserJSON.toJST_CLOSE_BRACE: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-function TParserJSON.toJST_EPS: Boolean;
-begin
- case LC of
-  JSL_LETTER:;
-  JSL_DIGIT19:;
-  JSL_NULL:;
-  JSL_QUOTES:;
-  JSL_DEFINITION:
-  begin
-   CurTerm := JST_COLON;
-   Result  := FALSE;
-  end;
-  JSL_OPEN_BRACE:
-  begin
-   CurTerm := JST_OPEN_BRACE;
-   Result  := FALSE;
-  end;
-  JSL_CLOSE_BRACE:
-  begin
-   CurTerm := JST_CLOSE_BRACE;
-   Result  := FALSE;
-  end;
-  JSL_OPEN_BRACKET:
-  begin
-   CurTerm := JST_OPEN_BRACKET;
-   Result  := FALSE;
-  end;
-  JSL_CLOSE_BRACKET:
-  begin
-   CurTerm := JST_CLOSE_BRACKET;
-   Result  := FALSE;
-  end;
-  JSL_COMMA:
-  begin
-   CurTerm := JSL_COMMA;
-   Result  := FALSE;
-  end;
-  JSL_POINT:;
-  JSL_BACKSLASH:;
-  JSL_SKIP:;
-  JSL_PLUS:;
-  JSL_MINUS:;
-  JSL_OVER:;
- end;
-end;
-
-function TParserJSON.toJST_OUT: Boolean;
-begin
- ParseInfo := JSC_ERROR;
- Result    := FALSE;
-end;
-
-procedure TParserJSON.GetTerminal;
-begin
- toStart;
- while StepTerm do;
-end;
-
-function TParserJSON.ParseStep(isStackEmpty: Boolean): Boolean;
-begin
- case CurLaw of
-  JSN_JSTEXT: toJSN_JSTEXT;
-  JSN_O:      toJSN_O;
-  JSN_OO:     toJSN_OO;
-  JSN_OOO:    toJSN_OOO;
-  JSN_A:      toJSN_A;
-  JSN_AA:     toJSN_AA;
-  JSN_AAA:    toJSN_AAA;
-  JSN_V:      toJSN_V;
-  JSN_M:      toJSN_M;
-  else if CurLaw = CurTerm then
-  begin
-   case CurLaw of
-    JST_STRING:
-      if isObj then
-      case ValName = '' of
-        TRUE:
-         begin
-           jsonObj^.Write(ValName, GetStr);
-           ValName := '';
-         end;
-        FALSE: ValName := GetStr;
-      end else jsonObj^.Write(ValName, GetStr);
-    JST_NUMBER:
-      if isObj then
-      begin
-        if ValName = '' then ParseInfo := JSC_ERROR;
-        jsonObj^.Write(ValName, GetNum);
-      end else jsonObj^.Write('', GetNum);
-    JST_TRUE:
-      if isObj then
-      begin
-        if ValName = '' then ParseInfo := JSC_ERROR;
-        jsonObj^.Write(ValName, GetBool(TRUE));
-      end else jsonObj^.Write('', GetBool(TRUE));
-    JST_FALSE:
-      if isObj then
-      begin
-        if ValName = '' then ParseInfo := JSC_ERROR;
-        jsonObj^.Write(ValName, GetBool(FALSE));
-      end else jsonObj^.Write('', GetBool(FALSE));
-    JST_NULL:;
-    JST_COLON:;
-    JST_COMMA:;
-    JST_OPEN_BRACKET:
-      if isObj then
-      begin
-        if ValName = '' then ParseInfo := JSC_ERROR;
-        jsonObj^.jsonBegin(JS_ARRAY, GetStr);
-      end else jsonObj^.jsonBegin(JS_ARRAY, '');
-    JST_CLOSE_BRACKET: jsonObj^.jsonEnd;
-    JST_OPEN_BRACE:
-      if isObj then
-      begin
-        if ValName = '' then ParseInfo := JSC_ERROR;
-        jsonObj^.jsonBegin(JS_OBJECT, GetStr);
-      end else jsonObj^.jsonBegin(JS_OBJECT, '');
-    JST_CLOSE_BRACE: jsonObj^.jsonEnd;
-   end;
-   GetTerminal;
-  end else
-  begin
-   ParseInfo := JSC_ERROR;
-   //// Добавить обработчик ошибок
-  end;
- end;
- if ParseInfo <> JSC_RIGHT then
- begin
-  Result := FALSE;
-  Exit;
- end;
- if isStackEmpty then CurLaw := JST_EPS else Pop;
- Result := TRUE;
-end;
-
-{$DEFINE err:= begin ParseInfo:=JSC_ERROR;EXIT;end}
-procedure TParserJSON.toJSN_JSTEXT;
-begin
- case CurTerm of
-  JST_OPEN_BRACKET:
-   begin
-    jsonObj^.jsonBegin(JS_ARRAY, '');
-    isObj := FALSE;
-    ValName := '';
-    Push([JSN_A]);
-   end;
-  JST_OPEN_BRACE:
-   begin
-    jsonObj^.jsonBegin(JS_OBJECT, '');
-    isObj := TRUE;
-    Push([JSN_O]);
-   end;
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_O;
-begin
- case CurTerm of
-  JST_OPEN_BRACE: Push([JST_OPEN_BRACE, JSN_OO, JST_CLOSE_BRACE]);
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_OO;
-begin
- case CurTerm of
-  JST_STRING: Push([JSN_M, JSN_OOO]);
-  JST_CLOSE_BRACE:;
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_OOO;
-begin
- case CurTerm of
-  JST_COMMA: Push([JST_COMMA, JSN_OO]);
-  JST_CLOSE_BRACE:;
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_A;
-begin
- case CurTerm of
-  JST_OPEN_BRACKET: Push([JST_OPEN_BRACKET, JSN_A, JST_CLOSE_BRACKET]);
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_AA;
-begin
- case CurTerm of
-  JST_STRING: Push([JSN_V, JSN_AAA]);
-  JST_NUMBER: Push([JSN_V, JSN_AAA]);
-  JST_TRUE:   Push([JSN_V, JSN_AAA]);
-  JST_FALSE:  Push([JSN_V, JSN_AAA]);
-  JST_NULL:   Push([JSN_V, JSN_AAA]);
-  JST_OPEN_BRACKET: Push([JSN_V, JSN_AAA]);
-  JST_CLOSE_BRACKET: Push(JST_EPS);
-  JST_OPEN_BRACE: Push([JSN_V, JSN_AAA]);
-  else err;
- end;
- isObj := FALSE;
-end;
-
-procedure TParserJSON.toJSN_AAA;
-begin
- case CurTerm of
-  JST_COMMA: Push([JST_COMMA, JSN_AA]);
-  JST_CLOSE_BRACKET: Push(JST_EPS);
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_V;
-begin
- case CurTerm of
-  JST_STRING: Push(JST_STRING);
-  JST_NUMBER: Push(JST_NUMBER);
-  JST_TRUE:   Push(JST_TRUE);
-  JST_FALSE:  Push(JST_FALSE);
-  JST_NULL:   Push(JST_NULL);
-  JST_OPEN_BRACKET: Push(JSN_O);
-  JST_OPEN_BRACE:   Push(JSN_A);
-  else err;
- end;
-end;
-
-procedure TParserJSON.toJSN_M;
-begin
- case CurTerm of
-  JST_STRING: Push([JST_STRING, JST_COLON, JSN_V]);
-  else err;
- end;
- isObj := TRUE;
-end;
-
-constructor TParserJSON.Create;
-begin
- Stack := jsonTermStack.Create;
- Clear;
-end;
-
-destructor TParserJSON.Destroy;
-begin
- Clear;
- Stack.Destroy;
- inherited Destroy;
-end;
-
-procedure TParserJSON.Clear;
-begin
- toStart;
- Position := 0;
- Symbols  := nil;
- ValName  := '';
- jsonObj  := nil;
- while not Stack.IsEmpty do Stack.Pop;
-end;
-
-function TParserJSON.Parse(Text: PString): JSCmessage;
-begin
- Clear;
- ParseInfo := JSC_RIGHT;
- Symbols   := Text;
- Position  := 0;
- GetTerminal;
- CurLaw := JSN_JSTEXT;
- while ParseStep(Stack.IsEmpty) do;
- Result := ParseInfo;
-end;
-
-procedure TParserJSON.Bind(SomePascalJSON: PPascalJSON);
-begin
- jsonObj := SomePascalJSON;
+ isError := TRUE;
+ Info    := JSI_ERROR;
 end;
 
 { TPascalJSON }
@@ -864,7 +436,7 @@ begin
  Result := Item[i - 1]^.Level + dlevel;
 end;
 
-procedure TPascalJSON.Change(Value: PDataBlockJSON; OldType, NewType: JStype);
+procedure TPascalJSON.Change(Value: PDataBlockJSON; OldType, NewType: jsType);
 begin
  case OldType of
    JS_NUMBER: dispose(Value^.numData);
@@ -878,7 +450,7 @@ begin
  end;
 end;
 
-procedure TPascalJSON.Clear(Value: PDataBlockJSON; OldType: JStype);
+procedure TPascalJSON.Clear(Value: PDataBlockJSON; OldType: jsType);
 begin
  Change(Value, OldType, JS_NONE);
 end;
@@ -938,7 +510,7 @@ begin
  end;
 end;
 
-procedure TPascalJSON.Change(i: Integer; SomeType: JStype);
+procedure TPascalJSON.Change(i: Integer; SomeType: jsType);
 begin
  Clear(i);
  with Item[i]^ do
@@ -975,133 +547,47 @@ end;
 
 function TPascalJSON.ConverterMessage(Code: JSCmessage): String;
 begin
- case Code of
-   JSC_RIGHT:            Result := 'right';
-   JSC_ERROR:            Result := 'unknown error';
-   JSC_BRACET_NUM:       Result := 'different number of brackets';
-   JSC_FILE_EXTENSION:   Result := 'the file extension is incorrect';
-   JSC_FILE_FOUND:       Result := 'file not found';
-   JSC_VALID_JSON:       Result := 'text file does not match JSON format';
-   JSC_VALID_EXTEN_LEN:  Result := 'extension length is not equal to format length';
-   JSC_VALID_EXTEN_NAME: Result := 'extension name is not "JSON"';
-  else
-   Result := 'unknown error';
- end;
- if Code <> JSC_RIGHT then Result := 'Error: ' + Result;
+ //case Code of
+ //  JSI_RIGHT:            Result := 'right';
+ //  JSI_ERROR:            Result := 'unknown error';
+ //  JSI_BRACET_NUM:       Result := 'different number of brackets';
+ //  JSI_FILE_EXTENSION:   Result := 'the file extension is incorrect';
+ //  JSI_FILE_FOUND:       Result := 'file not found';
+ //  JSI_VALID_JSON:       Result := 'text file does not match JSON format';
+ //  JSI_VALID_EXTEN_LEN:  Result := 'extension length is not equal to format length';
+ //  JSI_VALID_EXTEN_NAME: Result := 'extension name is not "JSON"';
+ // else
+ //  Result := 'unknown error';
+ //end;
+ //if Code <> JSI_RIGHT then Result := 'Error: ' + Result;
 end;
 
-function TPascalJSON.objValidationCheck: JSCmessage;
-var
- i, ds: Integer;
-begin
- ds := 0;
- for i := 0 to Count - 1 do
- with Item[i]^ do
- begin
-  if BlockType in JS_COMPLEX then inc(ds);
-  if BlockType =  JS_NONE    then dec(ds);
- end;
- if ds <> 0 then
- begin
-  Result := JSC_BRACET_NUM;
-  Exit;
- end;
- Result := JSC_RIGHT;
-end;
-
-function TPascalJSON.jsonValidationCheck(Text: String): JSCmessage;
-var
- i: integer;
- numBraces, numSqrBrackets: Integer;
- Quotes, Colon: Boolean;
-begin
- // Необходимо донастроить, включая проблемы с сиюминутным сжатием вопрос решить
- Result := JSC_RIGHT;
- Exit;
-
- Text := CompressDefinitions(Text);
- //Result := FALSE;
- Quotes := FALSE;
- Colon  := FALSE;
- numBraces := 0;
- numSqrBrackets := 0;
- if Text = '' then Exit;
- if (Text[1] <> '{') or (Text[Length(Text)] <> '}') then Exit;
- for i := 2 to Length(Text) - 1 do
- case Text[i] of
-  '"': Quotes := not Quotes;
-  '{': if not Quotes then inc(numBraces);
-  '}': if not Quotes then dec(numBraces);
-  '[': if not Quotes then inc(numSqrBrackets);
-  ']': if not Quotes then dec(numSqrBrackets);
-  ',': if not Quotes then
-    begin
-     if Text[i + 1] in ['}',']'] then Exit;
-     Colon := FALSE;
-    end;
-  ':': if not Quotes then
-    begin
-     if not Colon then Colon := TRUE
-                  else Exit;
-     if Text[i - 1] <> '"' then Exit;
-    end;
- end;
- if (numBraces <> 0) or (numSqrBrackets <> 0) or (Quotes) then Exit;
- Result := JSC_RIGHT;
-end;
-
-function TPascalJSON.toString(i: Integer): String;
-begin
- with Item[i]^ do
- begin
-  case BlockType of
-   JS_STRING: Result := '"' + Data^.strData^ + '"';
-   JS_NUMBER: Result := FloatToStr(Data^.numData^);
-   JS_BOOL: if Data^.boolData^ then Result := 'true'
-                               else Result := 'false';
-   JS_OBJECT: Result := '{';
-   JS_ARRAY:  Result := '[';
-   JS_NONE:
-    case Parent^.BlockType of
-     JS_OBJECT: Result := '}';
-     JS_ARRAY:  Result := ']';
-    end;
-  end;
-  if (Name <> '') and (i > 0) and (BlockType <> JS_NONE) then
-    Result := '"' + Name + '": ' + Result;
-  if i < Count - 1 then
-  if (Item[i + 1]^.BlockType <> JS_NONE) and not (BlockType in JS_COMPLEX) then
-    Result := Result + ',';
-  Result := TabLevel(Level) + Result + #13#10;
- end;
-end;
-
-function TPascalJSON.jsonExpansion(FileName: String): JSCmessage;
-var
- i: Integer;
- s: String;
-begin
- Result := JSC_ERROR;
- s := '';
- if FileName = '' then Exit;
- For i := Length(FileName) downto 1 do
- begin
-  if FileName[i] = '.' then
-  begin
-   if (length(s) <> 4) or (i = 1) then Exit;
-   if  (s[1] in ['j','J']) and (s[2] in ['s','S'])
-   and (s[3] in ['o','O']) and (s[4] in ['n','N']) then Result := JSC_RIGHT
-                                                   else Result := JSC_VALID_EXTEN_NAME;
-   Exit;
-  end;
-  s := FileName[i] + s;
-  if length(s) > 4 then
-  begin
-   Result := JSC_VALID_EXTEN_LEN;
-   Exit;
-  end;
- end;
-end;
+//function TPascalJSON.jsonExpansion(FileName: String): JSCmessage;
+//var
+// i: Integer;
+// s: String;
+//begin
+// Result := JSI_ERROR;
+// s := '';
+// if FileName = '' then Exit;
+// For i := Length(FileName) downto 1 do
+// begin
+//  if FileName[i] = '.' then
+//  begin
+//   if (length(s) <> 4) or (i = 1) then Exit;
+//   if  (s[1] in ['j','J']) and (s[2] in ['s','S'])
+//   and (s[3] in ['o','O']) and (s[4] in ['n','N']) then Result := JSI_RIGHT
+//                                                   else Result := JSI_VALID_EXTEN_NAME;
+//   Exit;
+//  end;
+//  s := FileName[i] + s;
+//  if length(s) > 4 then
+//  begin
+//   Result := JSI_VALID_EXTEN_LEN;
+//   Exit;
+//  end;
+// end;
+//end;
 
 function TPascalJSON.LoadFromFile(FileName: String; var jsonText: String
   ): JSCmessage;
@@ -1110,10 +596,10 @@ var
  s: String;
 begin
  Result := jsonExpansion(FileName);
- if Result <> JSC_RIGHT then Exit;
+ if Result <> JSI_RIGHT then Exit;
  if not FileExists( FileName ) then
  begin
-  Result := JSC_FILE_FOUND;
+  Result := JSI_FILE_FOUND;
   Exit;
  end;
  try
@@ -1126,8 +612,8 @@ begin
    jsonText += s;
   end;
   Result := jsonValidationCheck(jsonText);
-  if Result <> JSC_RIGHT then Exit;
-  Result := JSC_RIGHT;
+  if Result <> JSI_RIGHT then Exit;
+  Result := JSI_RIGHT;
  finally
   CloseFile(F);
  end;
@@ -1138,15 +624,15 @@ var
  F: TextFile;
 begin
  Result := jsonExpansion(FileName);
- if Result <> JSC_RIGHT then Exit;
+ if Result <> JSI_RIGHT then Exit;
  Result := objValidationCheck;
- if Result <> JSC_RIGHT then Exit;
+ if Result <> JSI_RIGHT then Exit;
  if FileExists( FileName ) then DeleteFile(FileName);
  try
   AssignFile(F, FileName);
   Rewrite(F);
   WriteLn(F, Text);
-  Result := JSC_RIGHT;
+  Result := JSI_RIGHT;
  finally
   CloseFile(F);
  end;
@@ -1173,7 +659,7 @@ begin
  Current := 0;
 end;
 
-procedure TPascalJSON.jsonBegin(SomeType: JStype; Name: String);
+procedure TPascalJSON.jsonBegin(SomeType: jsType; Name: String);
 var
  Position: Integer;
 begin
@@ -1224,7 +710,7 @@ var
  msg: JSCmessage;
 begin
  msg := objValidationCheck;
- if msg <> JSC_RIGHT then
+ if msg <> JSI_RIGHT then
  begin
   Result := ConverterMessage(msg);
   Exit;
@@ -1237,11 +723,8 @@ end;
 initialization
  DefaultFormatSettings.DecimalSeparator := '.';
  jsonMain   := TPascalJSON.Create;
- jsonParser := TParserJSON.Create;
- jsonParser.Bind(@jsonMain);
 
 finalization
- jsonParser.Destroy;
  jsonMain.Destroy;
 
 {$MACRO OFF}

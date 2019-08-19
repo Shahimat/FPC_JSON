@@ -46,7 +46,7 @@ const
  Function  jsonPath: String;
  Function  jsonGetPath(Path: String): String;
 
- Function  jsonString: String;
+ Function  jsonString: String; inline;
 
 
 implementation
@@ -107,10 +107,11 @@ TPascalJSON = class
   private
     Item: array of PBlockJSON;
     fCount, Current: Integer;
+    Control: PControllerBlock;
     Procedure SetCount(Value: Integer);
     Procedure Change(Value: PDataBlockJSON; OldType, NewType: jsType); Overload;
     Procedure Clear(Value: PDataBlockJSON; OldType: jsType); Overload;
-  protected
+
     (*Data*)
     Function  GetLevel(i: Integer): Integer;
     Function  TabLevel(Level: Integer): String;
@@ -128,27 +129,29 @@ TPascalJSON = class
 
     (*Over*)
     Function  toString(i: Integer): String; Overload;
-    Function  LoadFromFile(FileName: String; var jsonText: String): JSCmessage;
-    Function  SaveToFile(FileName, Text: String): JSCmessage; Overload;
+    Procedure LoadFromFile(FileName: String; var jsonText: String);
+    Procedure SaveToFile(FileName, Text: String); Overload;
     property  Count: Integer read fCount write SetCount;
   public
     Constructor Create;
     Destructor  Destroy; Override;
-    Procedure   Clear; Overload;
-    Procedure   toRoot;
-    Procedure   jsonBegin(SomeType: jsType; Name: String);
-    Procedure   jsonEnd;
-    Function    SaveToFile(FileName: String): JSCmessage; Overload;
-    Procedure   Parse(Text: String);
-    Procedure   Write(Name, Value: String); Overload;
-    Procedure   Write(Name: String; Value: Double);  Overload;
-    Procedure   Write(Name: String; Value: Integer); Overload;
-    Procedure   Write(Name: String; Value: Boolean); Overload;
-    Function    toString: String; Override; Overload;
+    Procedure Clear; Overload;
+    Procedure toRoot;
+    Procedure jsonBegin(SomeType: jsType; Name: String);
+    Procedure jsonEnd;
+    Procedure SaveToFile(FileName: String); Overload;
+    Procedure Parse(Text: String);
+    Procedure Write(Name, Value: String); Overload;
+    Procedure Write(Name: String; Value: Double);  Overload;
+    Procedure Write(Name: String; Value: Integer); Overload;
+    Procedure Write(Name: String; Value: Boolean); Overload;
+    Function  toString: String; Override; Overload;
+    Procedure BindController(SomeControl: PControllerBlock);
 end;
 
 var
- jsonMain:   TPascalJSON;
+ jsonMain: TPascalJSON;
+ Controller: TControllerBlock;
 
 {$MACRO ON}
 
@@ -545,21 +548,9 @@ begin
  Item[i]^.Data^.boolData^ := Value;
 end;
 
-function TPascalJSON.ConverterMessage(Code: JSCmessage): String;
+function TPascalJSON.toString(i: Integer): String;
 begin
- //case Code of
- //  JSI_RIGHT:            Result := 'right';
- //  JSI_ERROR:            Result := 'unknown error';
- //  JSI_BRACET_NUM:       Result := 'different number of brackets';
- //  JSI_FILE_EXTENSION:   Result := 'the file extension is incorrect';
- //  JSI_FILE_FOUND:       Result := 'file not found';
- //  JSI_VALID_JSON:       Result := 'text file does not match JSON format';
- //  JSI_VALID_EXTEN_LEN:  Result := 'extension length is not equal to format length';
- //  JSI_VALID_EXTEN_NAME: Result := 'extension name is not "JSON"';
- // else
- //  Result := 'unknown error';
- //end;
- //if Code <> JSI_RIGHT then Result := 'Error: ' + Result;
+
 end;
 
 //function TPascalJSON.jsonExpansion(FileName: String): JSCmessage;
@@ -589,53 +580,52 @@ end;
 // end;
 //end;
 
-function TPascalJSON.LoadFromFile(FileName: String; var jsonText: String
-  ): JSCmessage;
+procedure TPascalJSON.LoadFromFile(FileName: String; var jsonText: String);
 var
  F: TextFile;
  s: String;
 begin
- Result := jsonExpansion(FileName);
- if Result <> JSI_RIGHT then Exit;
- if not FileExists( FileName ) then
- begin
-  Result := JSI_FILE_FOUND;
-  Exit;
- end;
- try
-  jsonText := '';
-  AssignFile(F, FileName);
-  Reset(F);
-  while not EOF(F) do
-  begin
-   ReadLn(F, s);
-   jsonText += s;
-  end;
-  Result := jsonValidationCheck(jsonText);
-  if Result <> JSI_RIGHT then Exit;
-  Result := JSI_RIGHT;
- finally
-  CloseFile(F);
- end;
+ //Result := jsonExpansion(FileName);
+ //if Result <> JSI_RIGHT then Exit;
+ //if not FileExists( FileName ) then
+ //begin
+ // Result := JSI_FILE_FOUND;
+ // Exit;
+ //end;
+ //try
+ // jsonText := '';
+ // AssignFile(F, FileName);
+ // Reset(F);
+ // while not EOF(F) do
+ // begin
+ //  ReadLn(F, s);
+ //  jsonText += s;
+ // end;
+ // Result := jsonValidationCheck(jsonText);
+ // if Result <> JSI_RIGHT then Exit;
+ // Result := JSI_RIGHT;
+ //finally
+ // CloseFile(F);
+ //end;
 end;
 
-function TPascalJSON.SaveToFile(FileName, Text: String): JSCmessage;
+procedure TPascalJSON.SaveToFile(FileName, Text: String);
 var
  F: TextFile;
 begin
- Result := jsonExpansion(FileName);
- if Result <> JSI_RIGHT then Exit;
- Result := objValidationCheck;
- if Result <> JSI_RIGHT then Exit;
- if FileExists( FileName ) then DeleteFile(FileName);
- try
-  AssignFile(F, FileName);
-  Rewrite(F);
-  WriteLn(F, Text);
-  Result := JSI_RIGHT;
- finally
-  CloseFile(F);
- end;
+ //Result := jsonExpansion(FileName);
+ //if Result <> JSI_RIGHT then Exit;
+ //Result := objValidationCheck;
+ //if Result <> JSI_RIGHT then Exit;
+ //if FileExists( FileName ) then DeleteFile(FileName);
+ //try
+ // AssignFile(F, FileName);
+ // Rewrite(F);
+ // WriteLn(F, Text);
+ // Result := JSI_RIGHT;
+ //finally
+ // CloseFile(F);
+ //end;
 end;
 
 constructor TPascalJSON.Create;
@@ -681,9 +671,9 @@ begin
  BindParent(Position);
 end;
 
-function TPascalJSON.SaveToFile(FileName: String): JSCmessage;
+procedure TPascalJSON.SaveToFile(FileName: String);
 begin
- Result := SaveToFile(FileName, toString);
+ //Result := SaveToFile(FileName, toString);
 end;
 
 procedure TPascalJSON.Parse(Text: String);
@@ -707,24 +697,25 @@ const BlockType = JS_BOOL;   WRITE_NAME_VALUE
 function TPascalJSON.toString: String;
 var
  i: Integer;
- msg: JSCmessage;
 begin
- msg := objValidationCheck;
- if msg <> JSI_RIGHT then
- begin
-  Result := ConverterMessage(msg);
-  Exit;
- end;
  Result := '';
  if Count > 0 then for i := 0 to Count - 1 do Result += toString(i)
               else Result := '{' + #13#10 + '}';
 end;
 
+procedure TPascalJSON.BindController(SomeControl: PControllerBlock);
+begin
+ Control := SomeControl;
+end;
+
 initialization
  DefaultFormatSettings.DecimalSeparator := '.';
- jsonMain   := TPascalJSON.Create;
+ jsonMain := TPascalJSON.Create;
+ Controller := TControllerBlock.Create;
+ jsonMain.BindController( @Controller );
 
 finalization
+ Controller.Destroy;
  jsonMain.Destroy;
 
 {$MACRO OFF}

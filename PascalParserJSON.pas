@@ -17,13 +17,14 @@ jsToken  = (JST_NONE, JST_NUMBER, JST_STRING, JST_TRUE, JST_FALSE, JST_NULL,
   JST_VALUE_SEPARATOR, JST_NAME_SEPARATOR, JST_OBJECT_BEGIN, JST_OBJECT_END,
   JST_ARRAY_BEGIN, JST_ARRAY_END);
 
-Procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError: PBoolean); Overload;
+Procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError,
+  ValObject: PBoolean); Overload;
 Procedure jsonpBind(ValStructText: PString); inline; Overload;
 Procedure jsonpReset; inline;
 Procedure jsonpNextTerminalCheck; inline;
 Procedure jsonpNextTerminal; inline;
 Function  jsonpGetData: String; inline;
-Function  jsonpGetType: String; inline;
+Function  jsonpGetToken: String; inline;
 Function  jsonpGetInfo: String; inline;
 
 implementation
@@ -116,7 +117,7 @@ type
    Procedure BindController(SomeControl: PControllerBlock);
    Procedure NextTerminal;
    Function  GetData: String;
-   Function  GetType: String;
+   Function  GetToken: String;
  end;
 
  (* TParserJS *)
@@ -124,6 +125,7 @@ type
  TParserJS = class
   private
    Control: PControllerBlock;
+   isObject: Boolean;
    Lex: PTLexerJS;
    CurTerm: jsTerm;
    type jsTermStack = specialize TStack<jsTerm>;
@@ -132,7 +134,7 @@ type
    Function GetCurType: jsToken; inline;
    Procedure Push(ValType: jsTerm); Overload; inline;
    Procedure Push(const ValTypes: array of jsTerm); Overload; inline;
-   Procedure Pop;       inline;
+   Procedure Pop;        inline;
    Procedure toJSNS_JST; inline;
    Procedure toJSNS_O;   inline;
    Procedure toJSNS_OO;  inline;
@@ -149,6 +151,7 @@ type
    Procedure Clear;
    Procedure BindLexer(SomeLexer: PTLexerJS);
    Procedure BindController(SomeControl: PControllerBlock);
+   Procedure Bind(var ValObject: PBoolean);
    Procedure Reset;
    Procedure NextTerminal;
  end;
@@ -158,31 +161,33 @@ var
   Parser:     TParserJS;
   Controller: TControllerBlock;
 
-Procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError: PBoolean);
+procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError,
+  ValObject: PBoolean);
 begin
  Lexer.Bind(ValType);
  Lexer.Bind(ValFinished);
+ Parser.Bind(ValObject);
  Controller.Bind(ValError);
 end;
 
-Procedure jsonpBind(ValStructText: PString);
+procedure jsonpBind(ValStructText: PString);
 begin
  Lexer.Bind( ValStructText );
 end;
 
-Procedure jsonpReset;
+procedure jsonpReset;
 begin
  Controller.Reset;
  Lexer.Reset;
  Parser.Reset;
 end;
 
-Procedure jsonpNextTerminalCheck;
+procedure jsonpNextTerminalCheck;
 begin
  Parser.NextTerminal;
 end;
 
-Procedure jsonpNextTerminal;
+procedure jsonpNextTerminal;
 begin
  Lexer.NextTerminal;
 end;
@@ -192,9 +197,9 @@ begin
  Result := Lexer.GetData;
 end;
 
-function jsonpGetType: String;
+function jsonpGetToken: String;
 begin
- Result := Lexer.GetType;
+ Result := Lexer.GetToken;
 end;
 
 function jsonpGetInfo: String;
@@ -660,8 +665,8 @@ begin
  case CurType of
   JST_NUMBER:          Result := GetNumberInterval;
   JST_STRING:          Result := GetStringInterval;
-  JST_TRUE:            Result := 'TRUE';
-  JST_FALSE:           Result := 'FALSE';
+  JST_TRUE:            Result := 'true';
+  JST_FALSE:           Result := 'false';
   JST_NULL:            Result := 'null';
   JST_VALUE_SEPARATOR: Result := ',';
   JST_NAME_SEPARATOR:  Result := ':';
@@ -672,22 +677,22 @@ begin
  end else              Result := 'NONE';
 end;
 
-function TLexerJS.GetType: String;
+function TLexerJS.GetToken: String;
 begin
  if (not Control^.Err) and (Exelent) then
   case CurType of
-   JST_NUMBER:          Result := 'JST_NUMBER';
-   JST_STRING:          Result := 'JST_STRING';
-   JST_TRUE:            Result := 'JST_TRUE';
-   JST_FALSE:           Result := 'JST_FALSE';
-   JST_NULL:            Result := 'JST_NULL';
-   JST_VALUE_SEPARATOR: Result := 'JST_VALUE_SEPARATOR';
-   JST_NAME_SEPARATOR:  Result := 'JST_NAME_SEPARATOR';
-   JST_OBJECT_BEGIN:    Result := 'JST_OBJECT_BEGIN';
-   JST_OBJECT_END:      Result := 'JST_OBJECT_END';
-   JST_ARRAY_BEGIN:     Result := 'JST_ARRAY_BEGIN';
-   JST_ARRAY_END:       Result := 'JST_ARRAY_END';
-  end else              Result := 'JST_NONE';
+   JST_NUMBER:          Result := 'NUMBER';
+   JST_STRING:          Result := 'STRING';
+   JST_TRUE:            Result := 'TRUE';
+   JST_FALSE:           Result := 'FALSE';
+   JST_NULL:            Result := 'NULL';
+   JST_VALUE_SEPARATOR: Result := 'VALUE_SEPARATOR';
+   JST_NAME_SEPARATOR:  Result := 'NAME_SEPARATOR';
+   JST_OBJECT_BEGIN:    Result := 'OBJECT_BEGIN';
+   JST_OBJECT_END:      Result := 'OBJECT_END';
+   JST_ARRAY_BEGIN:     Result := 'ARRAY_BEGIN';
+   JST_ARRAY_END:       Result := 'ARRAY_END';
+  end else              Result := 'NONE';
 end;
 
 (* TParserJS *)
@@ -757,6 +762,7 @@ begin
   JST_OBJECT_END:;
   else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR | OBJECT END');
  end;
+ isObject := TRUE;
 end;
 
 procedure TParserJS.toJSNS_A;
@@ -792,12 +798,13 @@ begin
   JST_ARRAY_END:;
   else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR | ARRAY END');
  end;
+ isObject := FALSE;
 end;
 
 procedure TParserJS.toJSNS_V;
 const
  message = 'NUMBER | STRING | TRUE | FALSE | NULL '
-  +'| OBJECT BEGIN | ARRAY BEGIN';
+  + '| OBJECT BEGIN | ARRAY BEGIN';
 begin
  case CurType of
   JST_NUMBER: Push(JSTS_NUMBER);
@@ -848,10 +855,16 @@ begin
  Control := SomeControl;
 end;
 
+procedure TParserJS.Bind(var ValObject: PBoolean);
+begin
+ ValObject := @isObject;
+end;
+
 procedure TParserJS.Reset;
 begin
  ClearStack;
  Push([JSNS_JST, JSTS_OUT]);
+ isObject := TRUE;
 end;
 
 procedure TParserJS.NextTerminal;
@@ -884,11 +897,13 @@ begin
                 else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR');
    JSTS_NAME_SEPARATOR:  if CurType = JST_NAME_SEPARATOR then Break
                 else Control^.Msg(JSI_ERROR_EXPECTED, 'NAME SEPARATOR');
-   JSTS_OBJECT_BEGIN:    if CurType = JST_OBJECT_BEGIN then Break
+   JSTS_OBJECT_BEGIN:    if CurType = JST_OBJECT_BEGIN then
+                begin isObject := TRUE; Break; end
                 else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT BEGIN');
    JSTS_OBJECT_END:      if CurType = JST_OBJECT_END then Break
                 else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT END');
-   JSTS_ARRAY_BEGIN:     if CurType = JST_ARRAY_BEGIN then Break
+   JSTS_ARRAY_BEGIN:     if CurType = JST_ARRAY_BEGIN then
+                begin isObject := FALSE; Break; end
                 else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY BEGIN');
    JSTS_ARRAY_END:       if CurType = JST_ARRAY_END then Break
                 else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY END');

@@ -36,37 +36,44 @@ begin
  WriteLn;
 end;
 
+Function toText(Value: Boolean): String;
+begin
+ if Value then Result := 'TRUE'
+          else Result := 'FALSE';
+end;
+
 var
  Text: String;
  TermType: jsPToken;
- isFinished, isError: PBoolean;
+ isFinished, isError, isObject: PBoolean;
  Value: PBlockJSON;
 begin
 
   (*========================= Example 1 =========================*)
-  Print('Error syntax example');
+  Print('Example 1: Error syntax example');
   Text := '{"R": true,"f":[ 45, 4,"e":{}}';
-  jsonpBind(TermType, isFinished, isError);
+  Writeln('Input = ' + Text);
+  jsonpBind(TermType, isFinished, isError, isObject);
   jsonpBind(@Text);
   jsonpReset;
   repeat
    jsonpNextTerminalCheck;
-   Writeln(jsonpGetData + #9 + jsonpGetType);
+   Writeln( jsonpGetData + #9 + toText(isObject^) + #9 + jsonpGetToken );
   until isFinished^ or isError^;
   Writeln(jsonpGetInfo);
 
   (*========================= Example 2 =========================*)
-  Print('An example of direct access to the parser');
+  Print('Example 2: An example of direct access to the parser');
   LoadFromFile('ExampleInput.json', Text);
   jsonpReset;
   repeat
    jsonpNextTerminalCheck;
-   Writeln(jsonpGetData + #9 + jsonpGetType);
+   Writeln( jsonpGetData + #9 + toText(isObject^) + #9 + jsonpGetToken );
   until isFinished^ or isError^;
   Writeln(jsonpGetInfo);
 
   (*========================= Example 3 =========================*)
-  Print('Add data directly to the format');
+  Print('Example 3: Add data directly to the format');
   jsonClear;
   jsonBegin(JS_OBJECT);                                          //  0
    jsonBegin(JS_OBJECT, 'first');                                //  1
@@ -111,13 +118,30 @@ begin
   jsonSaveToFile('Output.json');
 
   (*========================= Example 4 =========================*)
-  Print('Direct access to the syntax tree');
+  Print('Example 4: Direct access to internal structure');
   jsonReset;
   while jsonRead(Value) do
+  with Value^ do
     WriteLn(
-     Value^.Name + #9 + Value^.Data + #9 + jsonGetType(Value^.BlockType) +
-     #9 + 'level = ' + IntToStr(Value^.Level)
+     IntToStr(Level) + #9 +
+     jsonGetType(BlockType) + #9 +
+     Name + #9 +
+     Data
     );
+
+  (*========================= Example 5 =========================*)
+  Print('Example 5: Using the built-in parser');
+  jsonClear;
+  jsonParse(@Text);
+  WriteLn('The result is similar to the previous one');
+  //writeLn(jsonString); //Full output
+
+  (*========================= Example 6 =========================*)
+  Print('Example 6: Using the built-in uploader');
+  jsonClear;
+  jsonLoadFromFile('ExampleInput.json');
+  WriteLn('The result is similar to the previous one');
+  //writeLn(jsonString); //Full output
 
   WriteLn;
   WriteLn('press Enter to exit...');

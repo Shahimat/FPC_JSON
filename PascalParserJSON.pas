@@ -17,14 +17,14 @@ jsToken  = (JST_NONE, JST_NUMBER, JST_STRING, JST_TRUE, JST_FALSE, JST_NULL,
   JST_VALUE_SEPARATOR, JST_NAME_SEPARATOR, JST_OBJECT_BEGIN, JST_OBJECT_END,
   JST_ARRAY_BEGIN, JST_ARRAY_END);
 
-Procedure jspBind(var ValType: jsPToken; var ValFinished, ValError: PBoolean); Overload;
-Procedure jspBind(ValStructText: PString); Overload;
-Procedure jspReset; inline;
-Procedure jspNextTerminalCheck; inline;
-Procedure jspNextTerminal; inline;
-Function  jspGetData: String;
-Function  jspGetType: String;
-Function  jspGetInfo: String;
+Procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError: PBoolean); Overload;
+Procedure jsonpBind(ValStructText: PString); inline; Overload;
+Procedure jsonpReset; inline;
+Procedure jsonpNextTerminalCheck; inline;
+Procedure jsonpNextTerminal; inline;
+Function  jsonpGetData: String; inline;
+Function  jsonpGetType: String; inline;
+Function  jsonpGetInfo: String; inline;
 
 implementation
 
@@ -58,6 +58,7 @@ type
  TControllerBlock = class
   private
    isError: Boolean;
+   isParserError: PBoolean;
    Info: jsInfoType;
    Param1, Param2: String;
    Function ErrorMessages: Boolean;
@@ -157,46 +158,46 @@ var
   Parser:     TParserJS;
   Controller: TControllerBlock;
 
-procedure jspBind(var ValType: jsPToken; var ValFinished, ValError: PBoolean);
+Procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError: PBoolean);
 begin
  Lexer.Bind(ValType);
  Lexer.Bind(ValFinished);
  Controller.Bind(ValError);
 end;
 
-procedure jspBind(ValStructText: PString);
+Procedure jsonpBind(ValStructText: PString);
 begin
  Lexer.Bind( ValStructText );
 end;
 
-procedure jspReset;
+Procedure jsonpReset;
 begin
  Controller.Reset;
  Lexer.Reset;
  Parser.Reset;
 end;
 
-procedure jspNextTerminalCheck;
+Procedure jsonpNextTerminalCheck;
 begin
  Parser.NextTerminal;
 end;
 
-procedure jspNextTerminal;
+Procedure jsonpNextTerminal;
 begin
  Lexer.NextTerminal;
 end;
 
-function jspGetData: String;
+function jsonpGetData: String;
 begin
  Result := Lexer.GetData;
 end;
 
-function jspGetType: String;
+function jsonpGetType: String;
 begin
  Result := Lexer.GetType;
 end;
 
-function jspGetInfo: String;
+function jsonpGetInfo: String;
 begin
  Result := Controller.GetInfo;
 end;
@@ -657,7 +658,6 @@ function TLexerJS.GetData: String;
 begin
  if (not Control^.Err) and (Exelent) then
  case CurType of
-  JST_NONE:            Result := 'untype data';
   JST_NUMBER:          Result := GetNumberInterval;
   JST_STRING:          Result := GetStringInterval;
   JST_TRUE:            Result := 'TRUE';
@@ -669,14 +669,13 @@ begin
   JST_OBJECT_END:      Result := '}';
   JST_ARRAY_BEGIN:     Result := '[';
   JST_ARRAY_END:       Result := ']';
- end else Result := Control^.GetInfo;
+ end else              Result := 'NONE';
 end;
 
 function TLexerJS.GetType: String;
 begin
  if (not Control^.Err) and (Exelent) then
   case CurType of
-   JST_NONE:            Result := 'JST_NONE';
    JST_NUMBER:          Result := 'JST_NUMBER';
    JST_STRING:          Result := 'JST_STRING';
    JST_TRUE:            Result := 'JST_TRUE';
@@ -688,7 +687,7 @@ begin
    JST_OBJECT_END:      Result := 'JST_OBJECT_END';
    JST_ARRAY_BEGIN:     Result := 'JST_ARRAY_BEGIN';
    JST_ARRAY_END:       Result := 'JST_ARRAY_END';
-  end else Result := Control^.GetInfo;
+  end else              Result := 'JST_NONE';
 end;
 
 (* TParserJS *)

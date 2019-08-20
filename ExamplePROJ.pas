@@ -24,9 +24,15 @@ Procedure Print(const Text: String); inline;
 begin
  WriteLn;
  WriteLn;
+ WriteLn;
+ WriteLn;
  WriteLn('==============================================');
+ WriteLn;
+ Write('    ');
  WriteLn(Text);
+ WriteLn;
  WriteLn('==============================================');
+ WriteLn;
  WriteLn;
 end;
 
@@ -39,27 +45,28 @@ begin
   (*========================= Example 1 =========================*)
   Print('Error syntax example');
   Text := '{"R": true,"f":[ 45, 4,"e":{}}';
-  jspBind(TermType, isFinished, isError);
-  jspBind(@Text);
-  jspReset;
+  jsonpBind(TermType, isFinished, isError);
+  jsonpBind(@Text);
+  jsonpReset;
   repeat
-   jspNextTerminalCheck;
-   Writeln(jspGetData + #9 + jspGetType);
+   jsonpNextTerminalCheck;
+   Writeln(jsonpGetData + #9 + jsonpGetType);
   until isFinished^ or isError^;
-  Writeln(jspGetInfo);
+  Writeln(jsonpGetInfo);
 
   (*========================= Example 2 =========================*)
   Print('An example of direct access to the parser');
   LoadFromFile('ExampleInput.json', Text);
-  jspReset;
+  jsonpReset;
   repeat
-   jspNextTerminalCheck;
-   Writeln(jspGetData + #9 + jspGetType);
+   jsonpNextTerminalCheck;
+   Writeln(jsonpGetData + #9 + jsonpGetType);
   until isFinished^ or isError^;
-  Writeln(jspGetInfo);
+  Writeln(jsonpGetInfo);
 
 
   (*========================= Example 3 =========================*)
+  Print('Add data directly to the format');
   jsonClear;
   jsonBegin(JS_OBJECT);                                          //  0
    jsonBegin(JS_OBJECT, 'first');                                //  1
@@ -100,12 +107,9 @@ begin
    jsonEnd;                                                      // 36
    jsonWrite('description','some    JSON converter?     yeah!'); // 37
   jsonEnd;                                                       // 38
+  writeLn(jsonString); //Output
+  jsonSaveToFile('Output.json');
 
-  (*Sample output in json view*)
-  writeLn(jsonString);
-  //jsonSaveToFile('Output.json');
-
-  //writeln( JSON_LoadFromFile('Example.json') );
 
   WriteLn;
   WriteLn('press Enter to exit...');

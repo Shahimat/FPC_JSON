@@ -15,7 +15,7 @@ interface
 uses PascalParserJSON;
 
 type
-  jsType = (  JS_NONE, JS_NUMBER, JS_STRING, JS_BOOL, JS_OBJECT, JS_ARRAY );
+  jsType = ( JS_NONE, JS_NUMBER, JS_STRING, JS_BOOL, JS_OBJECT, JS_ARRAY );
   jsSet  = set of jsType;
 
 const
@@ -24,24 +24,25 @@ const
   JS_COMPLEX: jsSet = [JS_OBJECT, JS_ARRAY];
 
  //Function JSON_LoadFromFile(FileName: String): String;
- //Function JSON_ValidationCheck(Text: String): Boolean;
 
- Procedure jsonWrite(Name, Value: String); Overload;
- Procedure jsonWrite(Name: String; Value: Double); Overload;
- Procedure jsonWrite(Name: String; Value: Integer); Overload;
- Procedure jsonWrite(Name: String; Value: Boolean); Overload;
- Procedure jsonWrite(Value: String); Overload;
- Procedure jsonWrite(Value: Double); Overload;
- Procedure jsonWrite(Value: Integer); Overload;
- Procedure jsonWrite(Value: Boolean); Overload;
- Procedure jsonBegin(SomeType: jsType; Name: String = '');
- Procedure jsonEnd;
+ Procedure jsonWrite(Name, Value: String); inline; Overload;
+ Procedure jsonWrite(Name: String; Value: Double); inline; Overload;
+ Procedure jsonWrite(Name: String; Value: Integer); inline; Overload;
+ Procedure jsonWrite(Name: String; Value: Boolean); inline; Overload;
+ Procedure jsonWrite(Value: String); inline; Overload;
+ Procedure jsonWrite(Value: Double); inline; Overload;
+ Procedure jsonWrite(Value: Integer); inline; Overload;
+ Procedure jsonWrite(Value: Boolean); inline; Overload;
+ Procedure jsonBegin(SomeType: jsType; Name: String = ''); inline;
+ Procedure jsonEnd; inline;
+ Procedure jsonParse(Text: PString); inline;
+
  Procedure jsonToRoot;
  //Function  jsonFind(Name: String; ElemType: jsType): Integer;
  Procedure jsonRead(Text: String);
  Procedure jsonCD(Text: String);
- Procedure jsonSaveToFile(FileName: String);
- Procedure jsonClear;
+ Procedure jsonSaveToFile(FileName: String); inline;
+ Procedure jsonClear; inline;
  Function  jsonInfo: String;
  Function  jsonPath: String;
  Function  jsonGetPath(Path: String): String;
@@ -108,6 +109,8 @@ TPascalJSON = class
     Item: array of PBlockJSON;
     fCount, Current: Integer;
     Control: PControllerBlock;
+    jsonPToken: jsPToken;
+    jsonFinished, jsonError: PBoolean;
     Procedure SetCount(Value: Integer);
     Procedure Change(Value: PDataBlockJSON; OldType, NewType: jsType); Overload;
     Procedure Clear(Value: PDataBlockJSON; OldType: jsType); Overload;
@@ -129,8 +132,6 @@ TPascalJSON = class
 
     (*Over*)
     Function  toString(i: Integer): String; Overload;
-    Procedure LoadFromFile(FileName: String; var jsonText: String);
-    Procedure SaveToFile(FileName, Text: String); Overload;
     property  Count: Integer read fCount write SetCount;
   public
     Constructor Create;
@@ -139,14 +140,17 @@ TPascalJSON = class
     Procedure toRoot;
     Procedure jsonBegin(SomeType: jsType; Name: String);
     Procedure jsonEnd;
-    Procedure SaveToFile(FileName: String); Overload;
-    Procedure Parse(Text: String);
+    Procedure LoadFromFile(FileName: String; var jsonText: String);
+    Procedure SaveToFile(FileName, Text: String); Overload;
+    Procedure SaveToFile(FileName: String); inline; Overload;
+    Procedure Parse(Text: PString);
     Procedure Write(Name, Value: String); Overload;
     Procedure Write(Name: String; Value: Double);  Overload;
     Procedure Write(Name: String; Value: Integer); Overload;
     Procedure Write(Name: String; Value: Boolean); Overload;
     Function  toString: String; Override; Overload;
     Procedure BindController(SomeControl: PControllerBlock);
+    Procedure BindParser;
 end;
 
 var
@@ -172,80 +176,6 @@ begin
     Item[Position]^.Name := Name;
 end;}
 
-Function Compress(Text: String): String;
-var
- i:       Integer;
- Bracket: Boolean;
-begin
- Result := '';
- Bracket := FALSE;
- for i := 1 to Length(Text) do
- begin
-  if Text[i] = '"' then Bracket := not Bracket;
-  if (Text[i] in [' ', #9, #13, #10]) and (not Bracket) then Continue;
-  Result += Text[i];
- end;
-end;
-
-Function CompressDefinitions(Text: String): String;
-var
- i: integer;
- Quotes: Boolean;
-begin
- Result := '';
- Quotes := FALSE;
- for i := 1 to Length(Text) do
- case Text[i] of
-  '"':
-    begin
-      Quotes := not Quotes;
-      if not Quotes then Result += '#';
-    end;
-  //'0'..'9','.','-','e','E':
-  //  begin
-  //   if Result[Length(Result)] = '$' then
-  //   if Text[i] = '-' then Exit
-  //                    else Continue;
-  //   if Text[i] in ['e','E'] then
-  //   begin
-  //
-  //   end;
-  //   Result += '$';
-  //  end
-  else if not Quotes then Result += Text[i];
- end;
-end;
-
-Procedure Analys(Text: String);
-var
- i: Integer;
- Quotes, isObject: Boolean;
- S: String;
-begin
- Quotes := FALSE;
- isObject := TRUE;
- S := '';
- for i := 2 to Length(Text) - 1 do
- case Text[i] of
-  '"': Quotes := not Quotes;
-  '{': if not Quotes then;
-  '}': if not Quotes then;
-  '[': if not Quotes then;
-  ']': if not Quotes then;
-  ',': if not Quotes then;
-  ':': if not Quotes then
-    case Text[i + 1] of
-      '{':;
-      '[':;
-      '"':;
-      '0'..'9':;
-      else;
-    end;
-  else S += Text[i];
- end;
-
-end;
-
 procedure jsonWrite(Name,         Value: String);  JSONWRITE_NAME_VALUE
 procedure jsonWrite(Name: String; Value: Double);  JSONWRITE_NAME_VALUE
 procedure jsonWrite(Name: String; Value: Integer); JSONWRITE_NAME_VALUE
@@ -263,6 +193,11 @@ end;
 procedure jsonEnd;
 begin
  jsonMain.jsonEnd;
+end;
+
+procedure jsonParse(Text: PString);
+begin
+ jsonMain.Parse(Text);
 end;
 
 procedure jsonToRoot;
@@ -292,7 +227,7 @@ end;
 
 procedure jsonClear;
 begin
-
+ jsonMain.Clear;
 end;
 
 function jsonInfo: String;
@@ -550,7 +485,28 @@ end;
 
 function TPascalJSON.toString(i: Integer): String;
 begin
-
+ with Item[i]^ do
+ begin
+  case BlockType of
+   JS_STRING: Result := '"' + Data^.strData^ + '"';
+   JS_NUMBER: Result := FloatToStr(Data^.numData^);
+   JS_BOOL: if Data^.boolData^ then Result := 'true'
+                               else Result := 'false';
+   JS_OBJECT: Result := '{';
+   JS_ARRAY:  Result := '[';
+   JS_NONE:
+    case Parent^.BlockType of
+     JS_OBJECT: Result := '}';
+     JS_ARRAY:  Result := ']';
+    end;
+  end;
+  if (Name <> '') and (i > 0) and (BlockType <> JS_NONE) then
+    Result := '"' + Name + '": ' + Result;
+  if i < Count - 1 then
+  if (Item[i + 1]^.BlockType <> JS_NONE) and not (BlockType in JS_COMPLEX) then
+    Result := Result + ',';
+  Result := TabLevel(Level) + Result + #13#10;
+ end;
 end;
 
 //function TPascalJSON.jsonExpansion(FileName: String): JSCmessage;
@@ -579,6 +535,53 @@ end;
 //  end;
 // end;
 //end;
+
+constructor TPascalJSON.Create;
+begin
+ Clear;
+end;
+
+destructor TPascalJSON.Destroy;
+begin
+ Clear;
+ jsonPToken := nil;
+ jsonFinished := nil;
+ jsonError := nil;
+ Control := nil;
+ inherited Destroy;
+end;
+
+procedure TPascalJSON.Clear;
+begin
+ Count := 0;
+end;
+
+procedure TPascalJSON.toRoot;
+begin
+ Current := 0;
+end;
+
+procedure TPascalJSON.jsonBegin(SomeType: jsType; Name: String);
+var
+ Position: Integer;
+begin
+ if not (SomeType in JS_COMPLEX) then Exit;
+ Position := Count;
+ Count := Position + 1;
+ Change(Position, SomeType);
+ Item[Position]^.Name := Name;
+ BindParent(Position);
+end;
+
+procedure TPascalJSON.jsonEnd;
+var
+ Position: Integer;
+begin
+ Position := Count;
+ Count := Position + 1;
+ Change(Position, JS_NONE);
+ BindParent(Position);
+end;
 
 procedure TPascalJSON.LoadFromFile(FileName: String; var jsonText: String);
 var
@@ -617,69 +620,31 @@ begin
  //if Result <> JSI_RIGHT then Exit;
  //Result := objValidationCheck;
  //if Result <> JSI_RIGHT then Exit;
- //if FileExists( FileName ) then DeleteFile(FileName);
- //try
- // AssignFile(F, FileName);
- // Rewrite(F);
- // WriteLn(F, Text);
- // Result := JSI_RIGHT;
- //finally
- // CloseFile(F);
- //end;
-end;
-
-constructor TPascalJSON.Create;
-begin
- Clear;
-end;
-
-destructor TPascalJSON.Destroy;
-begin
- Clear;
- inherited Destroy;
-end;
-
-procedure TPascalJSON.Clear;
-begin
- Count := 0;
-end;
-
-procedure TPascalJSON.toRoot;
-begin
- Current := 0;
-end;
-
-procedure TPascalJSON.jsonBegin(SomeType: jsType; Name: String);
-var
- Position: Integer;
-begin
- if not (SomeType in JS_COMPLEX) then Exit;
- Position := Count;
- Count := Position + 1;
- Change(Position, SomeType);
- Item[Position]^.Name := Name;
- BindParent(Position);
-end;
-
-procedure TPascalJSON.jsonEnd;
-var
- Position: Integer;
-begin
- Position := Count;
- Count := Position + 1;
- Change(Position, JS_NONE);
- BindParent(Position);
+ if FileExists( FileName ) then DeleteFile(FileName);
+ try
+  AssignFile(F, FileName);
+  Rewrite(F);
+  WriteLn(F, Text);
+ finally
+  CloseFile(F);
+ end;
 end;
 
 procedure TPascalJSON.SaveToFile(FileName: String);
 begin
- //Result := SaveToFile(FileName, toString);
+ SaveToFile(FileName, toString);
 end;
 
-procedure TPascalJSON.Parse(Text: String);
+procedure TPascalJSON.Parse(Text: PString);
 begin
  Clear;
-
+ jsonpBind(Text);
+ jsonpReset;
+ repeat
+  jsonpNextTerminalCheck;
+  //Writeln(jsonpGetData + #9 + jsonpGetType);
+ until jsonFinished^ or jsonError^;
+ //Writeln(jsonpGetInfo);
 end;
 
 procedure TPascalJSON.Write(Name, Value: String);
@@ -708,11 +673,17 @@ begin
  Control := SomeControl;
 end;
 
+procedure TPascalJSON.BindParser;
+begin
+ jsonpBind(jsonPToken, jsonFinished, jsonError);
+end;
+
 initialization
  DefaultFormatSettings.DecimalSeparator := '.';
  jsonMain := TPascalJSON.Create;
  Controller := TControllerBlock.Create;
  jsonMain.BindController( @Controller );
+ jsonMain.BindParser;
 
 finalization
  Controller.Destroy;

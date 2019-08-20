@@ -768,6 +768,9 @@ begin
 end;
 
 procedure TParserJS.toJSNS_AA;
+const
+ message = 'NUMBER | STRING | TRUE | FALSE | NULL '
+  + '| OBJECT BEGIN | ARRAY BEGIN | ARRAY END';
 begin
  case CurType of
   JST_NUMBER,
@@ -778,8 +781,7 @@ begin
   JST_OBJECT_BEGIN,
   JST_ARRAY_BEGIN: Push([JSNS_V, JSNS_AAA]);
   JST_ARRAY_END:;
-  else Control^.Msg(JSI_ERROR_EXPECTED, 'NUMBER | STRING | TRUE | FALSE | NULL '
-  + '| OBJECT BEGIN | ARRAY BEGIN | ARRAY END');
+  else Control^.Msg(JSI_ERROR_EXPECTED, message);
  end;
 end;
 
@@ -793,6 +795,9 @@ begin
 end;
 
 procedure TParserJS.toJSNS_V;
+const
+ message = 'NUMBER | STRING | TRUE | FALSE | NULL '
+  +'| OBJECT BEGIN | ARRAY BEGIN';
 begin
  case CurType of
   JST_NUMBER: Push(JSTS_NUMBER);
@@ -802,8 +807,7 @@ begin
   JST_NULL:   Push(JSTS_NULL);
   JST_OBJECT_BEGIN: Push(JSNS_O);
   JST_ARRAY_BEGIN: Push(JSNS_A);
-  else Control^.Msg(JSI_ERROR_EXPECTED, 'NUMBER | STRING | TRUE | FALSE | NULL '
-  +'| OBJECT BEGIN | ARRAY BEGIN');
+  else Control^.Msg(JSI_ERROR_EXPECTED, message);
  end;
 end;
 

@@ -2,7 +2,7 @@ program ExamplePROJ;
 
 {$APPTYPE CONSOLE}
 
-uses PascalParserJSON, PascalJSON;
+uses SysUtils, PascalParserJSON, PascalJSON;
 
 Procedure LoadFromFile(FileName: String; var SomeText: String);
 var
@@ -40,6 +40,7 @@ var
  Text: String;
  TermType: jsPToken;
  isFinished, isError: PBoolean;
+ Value: PBlockJSON;
 begin
 
   (*========================= Example 1 =========================*)
@@ -63,7 +64,6 @@ begin
    Writeln(jsonpGetData + #9 + jsonpGetType);
   until isFinished^ or isError^;
   Writeln(jsonpGetInfo);
-
 
   (*========================= Example 3 =========================*)
   Print('Add data directly to the format');
@@ -107,9 +107,17 @@ begin
    jsonEnd;                                                      // 36
    jsonWrite('description','some    JSON converter?     yeah!'); // 37
   jsonEnd;                                                       // 38
-  writeLn(jsonString); //Output
+  writeLn(jsonString); //Full output
   jsonSaveToFile('Output.json');
 
+  (*========================= Example 4 =========================*)
+  Print('Direct access to the syntax tree');
+  jsonReset;
+  while jsonRead(Value) do
+    WriteLn(
+     Value^.Name + #9 + Value^.Data + #9 + jsonGetType(Value^.BlockType) +
+     #9 + 'level = ' + IntToStr(Value^.Level)
+    );
 
   WriteLn;
   WriteLn('press Enter to exit...');

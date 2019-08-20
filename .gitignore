@@ -5,6 +5,7 @@
 *.log
 *.dbg
 *.ebnf
+/idea
 /lib
 /backup
 Output.json

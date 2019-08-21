@@ -21,11 +21,15 @@ Procedure jsonpBind(var ValType: jsPToken; var ValFinished, ValError,
   ValObject: PBoolean); Overload;
 Procedure jsonpBind(ValStructText: PString); inline; Overload;
 Procedure jsonpReset; inline;
-Procedure jsonpNextTerminalCheck; inline;
-Procedure jsonpNextTerminal; inline;
+Procedure jsonpNextTerminalCheck; inline;  //with parser and lexer
+Procedure jsonpNextTerminal; inline;       //with only lexer
+Procedure jsonpNextTerminalAnalys; inline; //with only parser
+Procedure jsonpPushToken(ValToken: jsToken); inline; Overload;
+Procedure jsonpPushToken(const ValTokens: array of jsToken); inline; Overload;
 Function  jsonpGetData: String; inline;
 Function  jsonpGetToken: String; inline;
 Function  jsonpGetInfo: String; inline;
+
 
 implementation
 
@@ -59,9 +63,9 @@ type
  TControllerBlock = class
   private
    isError: Boolean;
-   isParserError: PBoolean;
    Info: jsInfoType;
    Param1, Param2: String;
+   Step: Integer;
    Function ErrorMessages: Boolean;
   public
    Constructor Create;
@@ -82,7 +86,7 @@ type
   private
    Control: PControllerBlock;
    Stage: Integer;
-   CurType: jsToken;
+   CurToken: jsToken;
    CurLexeme: jsLexeme;
    Pos, PosText1, PosText2: Integer;
    PText: PString;
@@ -110,7 +114,8 @@ type
    Destructor  Destroy; Override;
    Procedure Clear;
    Procedure Reset;
-   property  Finished: Boolean read isFinished;
+   property  Finished: Boolean read isFinished write isFinished;
+   Property  Token: jsToken read CurToken write CurToken;
    Procedure Bind(SomeText: PString); Overload;
    Procedure Bind(var SomeFinished: PBoolean); Overload;
    Procedure Bind(var SomeTerminal: jsPToken); Overload;
@@ -124,14 +129,19 @@ type
 
  TParserJS = class
   private
-   Control: PControllerBlock;
+   Control:  PControllerBlock;
    isObject: Boolean;
    Lex: PTLexerJS;
    CurTerm: jsTerm;
-   type jsTermStack = specialize TStack<jsTerm>;
-   var  Stack: jsTermStack;
+   type
+    jsTermStack  = specialize TStack<jsTerm>;
+    jsTokenStack = specialize TStack<jsToken>;
+   var
+    Stack: jsTermStack;
+    TokenStack: jsTokenStack;
    Procedure ClearStack; inline;
-   Function GetCurType: jsToken; inline;
+   Function  GetCurToken: jsToken; inline;
+   Procedure SetCurToken(Value: jsToken); inline;
    Procedure Push(ValType: jsTerm); Overload; inline;
    Procedure Push(const ValTypes: array of jsTerm); Overload; inline;
    Procedure Pop;        inline;
@@ -144,7 +154,8 @@ type
    Procedure toJSNS_AAA; inline;
    Procedure toJSNS_V;   inline;
    Procedure toJSNS_M;   inline;
-   Property  CurType: jsToken read GetCurType;
+   Procedure TerminalAnalys; inline;
+   Property  CurToken: jsToken read GetCurToken write SetCurToken;
   public
    Constructor Create;
    Destructor  Destroy; Override;
@@ -154,6 +165,10 @@ type
    Procedure Bind(var ValObject: PBoolean);
    Procedure Reset;
    Procedure NextTerminal;
+   Procedure NextTerminalAnalys;
+   Procedure PushToken(SomeToken: jsToken); Overload;
+   Procedure PushToken(const SomeTokens: array of jsToken); Overload;
+   Function  PopToken: jsToken;
  end;
 
 var
@@ -190,6 +205,21 @@ end;
 procedure jsonpNextTerminal;
 begin
  Lexer.NextTerminal;
+end;
+
+procedure jsonpNextTerminalAnalys;
+begin
+ Parser.NextTerminalAnalys;
+end;
+
+procedure jsonpPushToken(ValToken: jsToken);
+begin
+ Parser.PushToken(ValToken);
+end;
+
+procedure jsonpPushToken(const ValTokens: array of jsToken);
+begin
+ Parser.PushToken(ValTokens);
 end;
 
 function jsonpGetData: String;
@@ -232,17 +262,23 @@ begin
 end;
 
 function TControllerBlock.GetInfo: String;
+var
+ s: String;
 begin
+ str(Step - 1, s);
  case Info of
   JSI_RIGHT:            Result := 'All right';
   JSI_ERROR:            Result := 'Error: Unknown error';
-  JSI_ERROR_EXPECTED:   Result := 'Error: Expected ' + Param1;
+  JSI_ERROR_EXPECTED:
+   Result := 'Error: Expected ' + Param1 + ' at step ' + s + ' but found ' +
+     jsonpGetToken;
   JSI_ERROR_UNTYPE:     Result := 'Error: Unknown type';
   JSI_ERROR_STRING_OUT: Result := 'Error: Out of string';
   JSI_ERROR_INCOMPLETE: Result := 'Error: Out of text';
-  JSI_ERROR_NO_DATA:    Result := 'Error: No data';
+  JSI_ERROR_NO_DATA:    Result := 'Error: No data. Are you sure you bind the text?';
   JSI_ERROR_SYNTAX_NOT_COMPLETED: Result := 'Error: Syntax not completed';
-  JSI_ERROR_LEXER_OUT_OF_SYNTAX:  Result := 'Error: Lexer out of syntax';
+  JSI_ERROR_LEXER_OUT_OF_SYNTAX:  Result := 'Error: Lexer out of syntax. Step = '
+    + s;
   else                  Result := 'Error: Unknown information';
  end;
 end;
@@ -558,7 +594,7 @@ end;
 procedure TLexerJS.Cycle;
 begin
  Stage     := 0;
- CurType   := JST_NONE;
+ CurToken   := JST_NONE;
  Exelent   := FALSE;
 end;
 
@@ -575,7 +611,7 @@ end;
 
 procedure TLexerJS.SetPar(SomeType: jsToken);
 begin
- CurType := SomeType;
+ CurToken := SomeType;
 end;
 
 procedure TLexerJS.SetPar(SomeLevel: Integer);
@@ -627,7 +663,7 @@ end;
 
 procedure TLexerJS.Bind(var SomeTerminal: jsPToken);
 begin
- SomeTerminal := @CurType;
+ SomeTerminal := @CurToken;
 end;
 
 procedure TLexerJS.BindController(SomeControl: PControllerBlock);
@@ -640,7 +676,7 @@ begin
  Cycle;
  repeat
   Step;
-  case curType of
+  case CurToken of
    JST_NONE:   DETECT_NONE;
    JST_NUMBER: DETECT_NUMBER;
    JST_STRING: DETECT_STRING;
@@ -652,7 +688,7 @@ begin
   if Pos = Length(PText^) then
   begin
    isFinished := TRUE;
-   if not (curType in [JST_OBJECT_END, JST_ARRAY_END, JST_NONE]) then
+   if not (CurToken in [JST_OBJECT_END, JST_ARRAY_END, JST_NONE]) then
      Control^.Msg(JSI_ERROR_INCOMPLETE);
    Exit;
   end;
@@ -662,7 +698,7 @@ end;
 function TLexerJS.GetData: String;
 begin
  if (not Control^.Err) and (Exelent) then
- case CurType of
+ case CurToken of
   JST_NUMBER:          Result := GetNumberInterval;
   JST_STRING:          Result := GetStringInterval;
   JST_TRUE:            Result := 'true';
@@ -674,13 +710,13 @@ begin
   JST_OBJECT_END:      Result := '}';
   JST_ARRAY_BEGIN:     Result := '[';
   JST_ARRAY_END:       Result := ']';
+  else                 Result := 'NONE';
  end else              Result := 'NONE';
 end;
 
 function TLexerJS.GetToken: String;
 begin
- if (not Control^.Err) and (Exelent) then
-  case CurType of
+  case CurToken of
    JST_NUMBER:          Result := 'NUMBER';
    JST_STRING:          Result := 'STRING';
    JST_TRUE:            Result := 'TRUE';
@@ -692,7 +728,8 @@ begin
    JST_OBJECT_END:      Result := 'OBJECT_END';
    JST_ARRAY_BEGIN:     Result := 'ARRAY_BEGIN';
    JST_ARRAY_END:       Result := 'ARRAY_END';
-  end else              Result := 'NONE';
+   else                 Result := 'NONE';
+  end;
 end;
 
 (* TParserJS *)
@@ -700,11 +737,17 @@ end;
 procedure TParserJS.ClearStack;
 begin
  while not Stack.IsEmpty do Stack.Pop;
+ while not TokenStack.IsEmpty do TokenStack.Pop;
 end;
 
-function TParserJS.GetCurType: jsToken;
+function TParserJS.GetCurToken: jsToken;
 begin
- Result := Lex^.CurType;
+ Result := Lex^.CurToken;
+end;
+
+procedure TParserJS.SetCurToken(Value: jsToken);
+begin
+ Lex^.CurToken := Value;
 end;
 
 procedure TParserJS.Push(ValType: jsTerm);
@@ -731,7 +774,7 @@ end;
 
 procedure TParserJS.toJSNS_JST;
 begin
- case CurType of
+ case CurToken of
   JST_OBJECT_BEGIN: Push(JSNS_O);
   JST_ARRAY_BEGIN:  Push(JSNS_A);
   else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT BEGIN | ARRAY BEGIN');
@@ -740,7 +783,7 @@ end;
 
 procedure TParserJS.toJSNS_O;
 begin
- case CurType of
+ case CurToken of
   JST_OBJECT_BEGIN: Push([JSTS_OBJECT_BEGIN, JSNS_OO, JSTS_OBJECT_END]);
   else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT BEGIN');
  end;
@@ -748,7 +791,7 @@ end;
 
 procedure TParserJS.toJSNS_OO;
 begin
- case CurType of
+ case CurToken of
   JST_STRING: Push([JSNS_M, JSNS_OOO]);
   JST_OBJECT_END:;
   else Control^.Msg(JSI_ERROR_EXPECTED, 'STRING | OBJECT END');
@@ -757,7 +800,7 @@ end;
 
 procedure TParserJS.toJSNS_OOO;
 begin
- case CurType of
+ case CurToken of
   JST_VALUE_SEPARATOR: Push([JSTS_VALUE_SEPARATOR, JSNS_OO]);
   JST_OBJECT_END:;
   else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR | OBJECT END');
@@ -767,7 +810,7 @@ end;
 
 procedure TParserJS.toJSNS_A;
 begin
- case CurType of
+ case CurToken of
   JST_ARRAY_BEGIN: Push([JSTS_ARRAY_BEGIN, JSNS_AA, JSTS_ARRAY_END]);
   else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY BEGIN');
  end;
@@ -778,7 +821,7 @@ const
  message = 'NUMBER | STRING | TRUE | FALSE | NULL '
   + '| OBJECT BEGIN | ARRAY BEGIN | ARRAY END';
 begin
- case CurType of
+ case CurToken of
   JST_NUMBER,
   JST_STRING,
   JST_TRUE,
@@ -793,7 +836,7 @@ end;
 
 procedure TParserJS.toJSNS_AAA;
 begin
- case CurType of
+ case CurToken of
   JST_VALUE_SEPARATOR: Push([JSTS_VALUE_SEPARATOR, JSNS_AA]);
   JST_ARRAY_END:;
   else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR | ARRAY END');
@@ -806,7 +849,7 @@ const
  message = 'NUMBER | STRING | TRUE | FALSE | NULL '
   + '| OBJECT BEGIN | ARRAY BEGIN';
 begin
- case CurType of
+ case CurToken of
   JST_NUMBER: Push(JSTS_NUMBER);
   JST_STRING: Push(JSTS_STRING);
   JST_TRUE:   Push(JSTS_TRUE);
@@ -820,21 +863,74 @@ end;
 
 procedure TParserJS.toJSNS_M;
 begin
- case CurType of
+ case CurToken of
   JST_STRING: Push([JSTS_STRING, JSTS_NAME_SEPARATOR, JSNS_V]);
   else Control^.Msg(JSI_ERROR_EXPECTED, 'STRING');
  end;
 end;
 
+procedure TParserJS.TerminalAnalys;
+begin
+ repeat
+   Pop;
+   case CurTerm of
+    JSNS_JST: toJSNS_JST;
+    JSNS_O:   toJSNS_O;
+    JSNS_OO:  toJSNS_OO;
+    JSNS_OOO: toJSNS_OOO;
+    JSNS_A:   toJSNS_A;
+    JSNS_AA:  toJSNS_AA;
+    JSNS_AAA: toJSNS_AAA;
+    JSNS_V:   toJSNS_V;
+    JSNS_M:   toJSNS_M;
+    JSTS_NUMBER: if CurToken = JST_NUMBER then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'NUMBER');
+    JSTS_STRING: if CurToken = JST_STRING then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'STRING');
+    JSTS_TRUE:   if CurToken = JST_TRUE then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'TRUE');
+    JSTS_FALSE:  if CurToken = JST_FALSE then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'FALSE');
+    JSTS_NULL:   if CurToken = JST_NULL then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'NULL');
+    JSTS_VALUE_SEPARATOR: if CurToken = JST_VALUE_SEPARATOR then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR');
+    JSTS_NAME_SEPARATOR:  if CurToken = JST_NAME_SEPARATOR then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'NAME SEPARATOR');
+    JSTS_OBJECT_BEGIN:    if CurToken = JST_OBJECT_BEGIN then
+                 begin isObject := TRUE; Break; end
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT BEGIN');
+    JSTS_OBJECT_END:      if CurToken = JST_OBJECT_END then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT END');
+    JSTS_ARRAY_BEGIN:     if CurToken = JST_ARRAY_BEGIN then
+                 begin isObject := FALSE; Break; end
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY BEGIN');
+    JSTS_ARRAY_END:       if CurToken = JST_ARRAY_END then Break
+                 else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY END');
+    JSTS_OUT: Control^.Msg(JSI_ERROR_LEXER_OUT_OF_SYNTAX);
+    else Control^.Error;
+   end;
+  until Control^.Err;
+  inc( Control^.Step );
+  if Lex^.Finished then
+  begin
+   Pop;
+   if not (CurTerm = JSTS_OUT) then
+     Control^.Msg(JSI_ERROR_SYNTAX_NOT_COMPLETED);
+  end;
+end;
+
 constructor TParserJS.Create;
 begin
  Stack := jsTermStack.Create;
+ TokenStack := jsTokenStack.Create;
 end;
 
 destructor TParserJS.Destroy;
 begin
  Clear;
  Stack.Destroy;
+ TokenStack.Destroy;
  inherited Destroy;
 end;
 
@@ -865,57 +961,43 @@ begin
  ClearStack;
  Push([JSNS_JST, JSTS_OUT]);
  isObject := TRUE;
+ Control^.Step := 0;
 end;
 
 procedure TParserJS.NextTerminal;
 begin
  if not Control^.Err then Lex^.NextTerminal
                      else Exit;
- repeat
-  Pop;
-  case CurTerm of
-   JSNS_JST: toJSNS_JST;
-   JSNS_O:   toJSNS_O;
-   JSNS_OO:  toJSNS_OO;
-   JSNS_OOO: toJSNS_OOO;
-   JSNS_A:   toJSNS_A;
-   JSNS_AA:  toJSNS_AA;
-   JSNS_AAA: toJSNS_AAA;
-   JSNS_V:   toJSNS_V;
-   JSNS_M:   toJSNS_M;
-   JSTS_NUMBER: if CurType = JST_NUMBER then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'NUMBER');
-   JSTS_STRING: if CurType = JST_STRING then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'STRING');
-   JSTS_TRUE:   if CurType = JST_TRUE then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'TRUE');
-   JSTS_FALSE:  if CurType = JST_FALSE then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'FALSE');
-   JSTS_NULL:   if CurType = JST_NULL then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'NULL');
-   JSTS_VALUE_SEPARATOR: if CurType = JST_VALUE_SEPARATOR then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'VALUE SEPARATOR');
-   JSTS_NAME_SEPARATOR:  if CurType = JST_NAME_SEPARATOR then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'NAME SEPARATOR');
-   JSTS_OBJECT_BEGIN:    if CurType = JST_OBJECT_BEGIN then
-                begin isObject := TRUE; Break; end
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT BEGIN');
-   JSTS_OBJECT_END:      if CurType = JST_OBJECT_END then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'OBJECT END');
-   JSTS_ARRAY_BEGIN:     if CurType = JST_ARRAY_BEGIN then
-                begin isObject := FALSE; Break; end
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY BEGIN');
-   JSTS_ARRAY_END:       if CurType = JST_ARRAY_END then Break
-                else Control^.Msg(JSI_ERROR_EXPECTED, 'ARRAY END');
-   JSTS_OUT: Control^.Msg(JSI_ERROR_LEXER_OUT_OF_SYNTAX);
-   else Control^.Error;
-  end;
- until Control^.Err;
- if Lex^.Finished then
- begin
-  Pop;
-  if not (CurTerm = JSTS_OUT) then
-    Control^.Msg(JSI_ERROR_SYNTAX_NOT_COMPLETED);
+ TerminalAnalys;
+end;
+
+procedure TParserJS.NextTerminalAnalys;
+begin
+ if not Control^.Err then Lex^.Token := PopToken
+                     else Exit;
+ TerminalAnalys;
+end;
+
+procedure TParserJS.PushToken(SomeToken: jsToken);
+begin
+ TokenStack.Push(SomeToken);
+end;
+
+procedure TParserJS.PushToken(const SomeTokens: array of jsToken);
+var
+ i: Integer;
+begin
+ For i := Low(SomeTokens) to High(SomeTokens) do
+  TokenStack.Push(SomeTokens[i]);
+end;
+
+function TParserJS.PopToken: jsToken;
+begin
+ if TokenStack.IsEmpty then Result := JST_NONE
+ else begin
+  Result := TokenStack.Top;
+  TokenStack.Pop;
+  if TokenStack.IsEmpty then Lex^.Finished := TRUE;
  end;
 end;
 

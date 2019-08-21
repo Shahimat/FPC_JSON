@@ -43,19 +43,17 @@ const
  Procedure jsonBegin(SomeType: jsType; Name: String = ''); inline;
  Procedure jsonEnd; inline;
  Procedure jsonParse(Text: PString); inline;
-
- Procedure jsonReset;
- //Function  jsonFind(Name: String; ElemType: jsType): Integer;
- Procedure jsonRead(Text: String);
- Procedure jsonCD(Text: String);
+ Procedure jsonReset; inline;
+ Function  jsonFind(Name: String; ElemType: jsType; var Pos: PBlockJSON): Boolean; inline; Overload;
+ Function  jsonFind(ElemType: jsType; var Pos: PBlockJSON): Boolean; inline; Overload;
+ Function  jsonFindNext(Name: String; ElemType: jsType; var Pos: PBlockJSON): Boolean; inline; Overload;
+ Function  jsonFindNext(ElemType: jsType; var Pos: PBlockJSON): Boolean; inline; Overload;
  Procedure jsonSaveToFile(FileName: String); inline;
  Procedure jsonLoadFromFile(FileName: String); inline;
  Procedure jsonClear; inline;
- Function  jsonInfo: String;
- Function  jsonPath: String;
- Function  jsonGetPath(Path: String): String;
-
+ Function  jsonInfo: String; inline;
  Function  jsonString: String; inline;
+ Function  jsonValidate: Boolean; inline;
 
 
 implementation
@@ -64,13 +62,9 @@ uses SysUtils;
 
 type
 
- //JSCmessage = (JSI_RIGHT, JSI_ERROR, JSI_BRACET_NUM, JSI_FILE_EXTENSION,
- //  JSI_FILE_FOUND, JSI_VALID_JSON, JSI_VALID_EXTEN_LEN, JSI_VALID_EXTEN_NAME);
-
 jsPInfoType = ^jsInfoType;
-jsInfoType  = (JSI_RIGHT, JSI_ERROR, JSI_ERROR_EXPECTED, JSI_ERROR_UNTYPE,
-  JSI_ERROR_STRING_OUT, JSI_ERROR_INCOMPLETE, JSI_ERROR_SYNTAX_NOT_COMPLETED,
-  JSI_ERROR_LEXER_OUT_OF_SYNTAX, JSI_ERROR_NO_DATA);
+jsInfoType  = (JSI_RIGHT, JSI_ERROR, JSI_ERROR_PARSER, JSI_ERROR_EXTENSION,
+  JSI_ERROR_FILEEXISTS, JSI_ERROR_VALIDATION, JSI_ERROR_FILENAME);
 
 (* TControllerBlock *)
 
@@ -91,6 +85,7 @@ TControllerBlock = class
   Procedure Bind(var SomeErr: PBoolean); Overload;
   Procedure Bind(var SomeInfo: jsPInfoType); Overload;
   Procedure Error;
+  Procedure Right;
 end;
 
 (* TPascalJSON *)
@@ -116,8 +111,8 @@ TPascalJSON = class
     Procedure SetData(i: Integer; Value: Boolean);  Overload;
 
     (*Checks*)
-    //Function  ConverterMessage(Code: JSCmessage): String;
-    Function  jsonExpansion( FileName: String ): Boolean;
+    Function  jsonExtension( FileName: String ): Boolean;
+    Procedure PushTokens(i: Integer); inline;
 
     (*Over*)
     Function  toString(i: Integer): String; Overload;
@@ -142,6 +137,9 @@ TPascalJSON = class
     Function  toString: String; Override; Overload;
     Procedure BindController(SomeControl: PControllerBlock);
     Procedure BindParser;
+    Function  Find(Name: String; ElemType: jsType; var Pos: PBlockJSON): Boolean;
+    Function  FindNext(Name: String; ElemType: jsType; var Pos: PBlockJSON): Boolean;
+    Function  Validate: Boolean;
 end;
 
 var
@@ -178,7 +176,7 @@ procedure jsonWrite(Value: Boolean); JSONWRITE_VALUE
 
 function jsonRead(var PValue: PBlockJSON): Boolean;
 begin
- jsonMain.Read(PValue);
+ Result := jsonMain.Read(PValue);
 end;
 
 function jsonGetType(SomeType: jsType): String;
@@ -209,24 +207,30 @@ begin
  jsonMain.Parse(Text);
 end;
 
-//function jsonFind(Name: String; ElemType: jsType): Integer;
-//begin
-//
-//end;
-
 procedure jsonReset;
 begin
  jsonMain.Reset;
 end;
 
-procedure jsonRead(Text: String);
+function jsonFind(Name: String; ElemType: jsType; var Pos: PBlockJSON): Boolean;
 begin
-
+ Result := jsonMain.Find(Name, ElemType, Pos);
 end;
 
-procedure jsonCD(Text: String);
+function jsonFind(ElemType: jsType; var Pos: PBlockJSON): Boolean;
 begin
+ Result := jsonMain.Find('', ElemType, Pos);
+end;
 
+function jsonFindNext(Name: String; ElemType: jsType; var Pos: PBlockJSON
+  ): Boolean;
+begin
+ Result := jsonMain.FindNext(Name, ElemType, Pos);
+end;
+
+function jsonFindNext(ElemType: jsType; var Pos: PBlockJSON): Boolean;
+begin
+ Result := jsonMain.FindNext('', ElemType, Pos);
 end;
 
 procedure jsonSaveToFile(FileName: String);
@@ -246,22 +250,17 @@ end;
 
 function jsonInfo: String;
 begin
-
-end;
-
-function jsonPath: String;
-begin
-
-end;
-
-function jsonGetPath(Path: String): String;
-begin
-
+ Result := Controller.GetInfo;
 end;
 
 function jsonString: String;
 begin
  Result := jsonMain.toString;
+end;
+
+function jsonValidate: Boolean;
+begin
+ Result := jsonMain.Validate;
 end;
 
 { TControllerBlock }
@@ -270,13 +269,11 @@ function TControllerBlock.ErrorMessages: Boolean;
 begin
  case Info of
   JSI_ERROR,
-  JSI_ERROR_EXPECTED,
-  JSI_ERROR_UNTYPE,
-  JSI_ERROR_STRING_OUT,
-  JSI_ERROR_INCOMPLETE,
-  JSI_ERROR_SYNTAX_NOT_COMPLETED,
-  JSI_ERROR_LEXER_OUT_OF_SYNTAX,
-  JSI_ERROR_NO_DATA:
+  JSI_ERROR_PARSER,
+  JSI_ERROR_EXTENSION,
+  JSI_ERROR_FILEEXISTS,
+  JSI_ERROR_VALIDATION,
+  JSI_ERROR_FILENAME:
         Result := TRUE;
   else  Result := FALSE;
  end;
@@ -284,8 +281,8 @@ end;
 
 constructor TControllerBlock.Create;
 begin
- isError := TRUE;
- Info    := JSI_ERROR_NO_DATA;
+ isError := FALSE;
+ Info    := JSI_RIGHT;
 end;
 
 function TControllerBlock.GetInfo: String;
@@ -293,13 +290,11 @@ begin
  case Info of
   JSI_RIGHT:            Result := 'All right';
   JSI_ERROR:            Result := 'Error: Unknown error';
-  JSI_ERROR_EXPECTED:   Result := 'Error: Expected ' + Param1;
-  JSI_ERROR_UNTYPE:     Result := 'Error: Unknown type';
-  JSI_ERROR_STRING_OUT: Result := 'Error: Out of string';
-  JSI_ERROR_INCOMPLETE: Result := 'Error: Out of text';
-  JSI_ERROR_NO_DATA:    Result := 'Error: No data';
-  JSI_ERROR_SYNTAX_NOT_COMPLETED: Result := 'Error: Syntax not completed';
-  JSI_ERROR_LEXER_OUT_OF_SYNTAX:  Result := 'Error: Lexer out of syntax';
+  JSI_ERROR_PARSER:     Result := 'Failed Parse: ' + jsonpGetInfo;
+  JSI_ERROR_EXTENSION:  Result := 'Error: Incorrect file extension entry';
+  JSI_ERROR_FILEEXISTS: Result := 'Error: File not exists';
+  JSI_ERROR_VALIDATION: Result := 'Failed validation: ' + jsonpGetInfo;
+  JSI_ERROR_FILENAME:   Result := 'Error: No file name entered';
   else                  Result := 'Error: Unknown information';
  end;
 end;
@@ -342,6 +337,12 @@ procedure TControllerBlock.Error;
 begin
  isError := TRUE;
  Info    := JSI_ERROR;
+end;
+
+procedure TControllerBlock.Right;
+begin
+ isError := FALSE;
+ Info    := JSI_RIGHT;
 end;
 
 { TPascalJSON }
@@ -425,6 +426,7 @@ begin
     end;
    end;
   end;
+  Item[i]^.Parent := Item[0];
 end;
 
 procedure TPascalJSON.Clear(i: Integer);
@@ -494,25 +496,55 @@ begin
  end;
 end;
 
-function TPascalJSON.jsonExpansion(FileName: String): Boolean;
+function TPascalJSON.jsonExtension(FileName: String): Boolean;
 var
  i: Integer;
  s: String;
 begin
  Result := FALSE;
- if FileName = '' then Exit;
+ if FileName = '' then
+ begin
+  Control^.Msg(JSI_ERROR_FILENAME);
+  Exit;
+ end;
  s := '';
  For i := Length(FileName) downto 1 do
  begin
   if FileName[i] = '.' then
   begin
-   if (length(s) <> 4) or (i = 1) then Exit;
+   if (length(s) <> 4) or (i = 1) then Break;
    if  (s[1] in ['j','J']) and (s[2] in ['s','S'])
-   and (s[3] in ['o','O']) and (s[4] in ['n','N']) then Result := TRUE;
-   Exit;
+   and (s[3] in ['o','O']) and (s[4] in ['n','N']) then
+   begin
+    Result := TRUE;
+    Exit;
+   end;
+   Break;
   end;
   s := FileName[i] + s;
-  if length(s) > 4 then Exit;
+  if length(s) > 4 then Break;
+ end;
+ Control^.Msg(JSI_ERROR_EXTENSION);
+end;
+
+procedure TPascalJSON.PushTokens(i: Integer);
+begin
+ with Item[i]^ do
+ begin
+  if i < Count - 1 then
+  if (Item[i + 1]^.BlockType <> JS_END) and not (BlockType in JS_COMPLEX) then
+    jsonpPushToken(JST_VALUE_SEPARATOR);
+  case BlockType of
+   JS_NUMBER: jsonpPushToken(JST_NUMBER);
+   JS_STRING: jsonpPushToken(JST_STRING);
+   JS_BOOL:   jsonpPushToken(JST_TRUE);
+   JS_OBJECT: jsonpPushToken(JST_OBJECT_BEGIN);
+   JS_ARRAY:  jsonpPushToken(JST_ARRAY_BEGIN);
+   JS_END:    if Parent^.BlockType = JS_OBJECT then jsonpPushToken(JST_OBJECT_END)
+                                               else jsonpPushToken(JST_ARRAY_END);
+  end;
+  if (Parent^.BlockType = JS_OBJECT) and (i > 0) and (BlockType <> JS_END) then
+    jsonpPushToken([JST_NAME_SEPARATOR, JST_STRING]);
  end;
 end;
 
@@ -538,7 +570,7 @@ end;
 
 procedure TPascalJSON.Reset;
 begin
- Current := -1;
+ Current := 0;
 end;
 
 procedure TPascalJSON.jsonBegin(SomeType: jsType; Name: String);
@@ -568,8 +600,12 @@ var
  F: TextFile;
  s, Text: String;
 begin
- if not jsonExpansion(FileName) then Exit;
- if not FileExists( FileName ) then Exit;
+ if not jsonExtension(FileName) then Exit;
+ if not FileExists( FileName ) then
+ begin
+  Control^.Msg(JSI_ERROR_FILEEXISTS);
+  Exit;
+ end;
  Text := '';
  try
   AssignFile(F, FileName);
@@ -590,10 +626,8 @@ procedure TPascalJSON.SaveToFile(FileName, Text: String);
 var
  F: TextFile;
 begin
- //Result := jsonExpansion(FileName);
- //if Result <> JSI_RIGHT then Exit;
- //Result := objValidationCheck;
- //if Result <> JSI_RIGHT then Exit;
+ if not jsonExtension(FileName) then Exit;
+ if not Validate then Exit;
  if FileExists( FileName ) then DeleteFile(FileName);
  try
   AssignFile(F, FileName);
@@ -654,6 +688,8 @@ begin
    JST_OBJECT_END, JST_ARRAY_END: jsonEnd;
   end;
  until jsonFinished^ or jsonError^;
+ if jsonError^ then Control^.Msg(JSI_ERROR_PARSER)
+               else Control^.Right;
 end;
 
 procedure TPascalJSON.Write(Name, Value: String);
@@ -673,10 +709,9 @@ WRITE_NAME_VALUE
 
 function TPascalJSON.Read(var PValue: PBlockJSON): Boolean;
 begin
- Result := True;
- if Current < Count - 1 then inc(Current)
-                        else Result := False;
  PValue := Item[Current];
+ Result := Current < Count - 1;
+ if Result then inc(Current);
 end;
 
 function TPascalJSON.toString: String;
@@ -696,6 +731,54 @@ end;
 procedure TPascalJSON.BindParser;
 begin
  jsonpBind(jsonPToken, jsonFinished, jsonError, jsonObject);
+end;
+
+function TPascalJSON.Find(Name: String; ElemType: jsType; var Pos: PBlockJSON
+  ): Boolean;
+var
+ i: Integer;
+begin
+ Result := FALSE;
+ for i := 0 to Count - 1 do
+ if Item[i]^.BlockType = ElemType then
+ if Item[i]^.Name = Name then
+ begin
+  Result := TRUE;
+  Current := i;
+  Break;
+ end;
+ Pos := Item[Current];
+end;
+
+function TPascalJSON.FindNext(Name: String; ElemType: jsType;
+  var Pos: PBlockJSON): Boolean;
+var
+ i: Integer;
+begin
+ Result := FALSE;
+ for i := Current + 1 to Count - 1 do
+ if Item[i]^.BlockType = ElemType then
+ if Item[i]^.Name = Name then
+ begin
+  Result := TRUE;
+  Current := i;
+  Break;
+ end;
+ Pos := Item[Current];
+end;
+
+function TPascalJSON.Validate: Boolean;
+var
+ i: Integer;
+begin
+ jsonpReset;
+ for i := Count - 1 downto 0 do
+  PushTokens(i);
+ repeat
+  jsonpNextTerminalAnalys;
+ until jsonFinished^ or jsonError^;
+ Result := not jsonError^;
+ if jsonError^ then Control^.Msg(JSI_ERROR_VALIDATION);
 end;
 
 initialization

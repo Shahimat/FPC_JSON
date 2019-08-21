@@ -10,8 +10,8 @@ The whole project is divided into 3 files:
 ### EBNF notation of standart JSON RFC 8259
 
 ```EBNF
-(*=== Лексическая часть ===*)
-(* Лексемы *)
+(*=== Lexical part ===*)
+(* Lexemes *)
 (* char -> all symbols without " *)
 plus            = '+';
 minus           = '-';
@@ -21,14 +21,14 @@ digit19         = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 quotation_mark  = '"';
 separator       = #9 | #13 | #10 | ' ';
 
-(* Определения *)
+(* Definitions *)
 digit = zero | digit19;
 e     = 'e' | 'E';
 int   = zero | (digit19, {digit});
 frac  = point, digit, {digit};
 exp   = e, [minus | plus], digit, {digit};
 
-(* Токены *)
+(* Tokens *)
 value_separator = ',';
 name_separator  = ':';
 object_begin    = '{';
@@ -41,7 +41,7 @@ null    = 'null';
 string  = quotation_mark, {char}, quotation_mark;
 number  = [minus], int, [frac], [exp];
 
-(*=== Синтаксическая часть ===*)
+(*=== Syntax part ===*)
 json_text = object | array;
 object    = object_begin, [member, {value_separator, member}], object_end;
 array     = array_begin, [value, {value_separator, value}], array_end;
